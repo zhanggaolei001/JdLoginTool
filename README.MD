@@ -1,0 +1,3 @@
+一个基于CefSharp的京东cookie获取工具
+运行后,登录京东,会自动将cookie复制到粘贴板.
+注意:此项目cookie为ios端的,不能用于京东试用
