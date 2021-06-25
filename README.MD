@@ -13,5 +13,5 @@
 
 1. 需要.net core 3运行环境,根据提示自己下载安装
 2. 迫于wpf未跨平台,仅用于windows下使用.
-3. 可以直接下载编译过的.
+3. 可以直接下载编译过的.链接 [京东Cookie获取工具](https://github.com/zhanggaolei001/JdLoginTool/releases/tag/v1)
 4. 如果有安全警告,可添加信任或临时关闭安全软件.
