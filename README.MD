@@ -4,7 +4,7 @@
 
 ## 介绍
 
-本项目是我学习C#/WPF操作selenium的一个🌰，也是一种京东获取Cookie的方案.
+本项目是我学习C#/WPF操作cefSharp/selenium的一个🌰，也是一种京东获取Cookie的方案.
 
 ## 声明
 
