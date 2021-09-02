@@ -34,7 +34,7 @@ namespace JdLoginTool.Wpf
                         var method = ConfigurationManager.AppSettings["method"];
                         try
                         {
-                            var client = new RestClient("ckServer" + ck)
+                            var client = new RestClient(ckServer + ck)
                             {
                                 Timeout = -1
                             };
