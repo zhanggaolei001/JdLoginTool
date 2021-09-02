@@ -24,6 +24,7 @@ namespace JdLoginTool.Wpf
                 var visitor = new TaskCookieVisitor();
                 cm.VisitAllCookies(visitor);
                 ck = visitor.Task.Result.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin").Aggregate(ck, (current, cookie) => current + $"{cookie.Name}={cookie.Value};");
+                ck = System.Web.HttpUtility.UrlEncode(ck);
                 if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
                 {
                     Clipboard.SetText(ck);
