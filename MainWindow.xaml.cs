@@ -28,9 +28,9 @@ namespace JdLoginTool.Wpf
                 {
                     Clipboard.SetText(ck);
                     var upload = ConfigurationManager.AppSettings["upload"] == "true";
-                    var ckServer = ConfigurationManager.AppSettings["server"]; 
+                    var ckServer = ConfigurationManager.AppSettings["server"];
                     if (upload && !string.IsNullOrWhiteSpace(ckServer))
-                    { 
+                    {
                         var method = ConfigurationManager.AppSettings["method"];
                         try
                         {
@@ -39,15 +39,19 @@ namespace JdLoginTool.Wpf
                                 Timeout = -1
                             };
                             var request = new RestRequest(method == "post" ? Method.POST : Method.GET);
-                            client.Execute(request);
+                            var response = client.Execute(request);
+                            Console.WriteLine(response.Content);
+                            MessageBox.Show(ck, "Cookie已上传服务器,且已复制到剪切板");
                         }
                         catch (Exception e)
                         {
                             MessageBox.Show(e.Message);
-                        }
-
+                        } 
                     }
-                    MessageBox.Show(ck, "Cookie已复制到剪切板");
+                    else
+                    { 
+                        MessageBox.Show(ck, "Cookie已复制到剪切板");
+                    }
                     Application.Current.Shutdown();
                 }
             }));
