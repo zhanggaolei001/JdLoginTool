@@ -28,6 +28,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" /> 
                 <ColumnDefinition Width="Auto" /> 
+                <ColumnDefinition Width="Auto" /> 
 
             </Grid.ColumnDefinitions>
             <TextBox x:Name="txtBoxAddress"
@@ -43,13 +44,13 @@
             <Button Content="重新加载" 
                     Grid.Column="1"
                     Command="{Binding ElementName=Browser,Path=ReloadCommand}"
-                    Width="80" />
+                    Width="80" /> 
         </Grid>
         <Border Grid.Row="1"
                 BorderBrush="Gray"
                 BorderThickness="0,1">
             <wpf:ChromiumWebBrowser x:Name="Browser"
-                                    Address="m.jd.com">
+                                    Address="https://m.jd.com/">
                 <behaviors:Interaction.Behaviors>
                     <behaviours:HoverLinkBehaviour x:Name="HoverLinkBehaviour" />
                 </behaviors:Interaction.Behaviors>
