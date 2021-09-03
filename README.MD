@@ -17,7 +17,7 @@
 
 1. 需要.net core 3运行环境,根据提示自己下载安装 [运行环境下载传送门](https://dotnet.microsoft.com/download/dotnet/3.0/runtime)
 2. 迫于wpf未跨平台,仅用于windows下使用.
-3. 可以直接下载编译过的. [release](https://github.com/zhanggaolei001/JdLoginTool/releases/tag/v1)
+3. 可以直接下载编译过的. [release](https://github.com/zhanggaolei001/JdLoginTool/releases)
 4. 如果有安全警告,可添加信任或临时关闭安全软件.
 ## 最后
 别忘了点亮那颗星哦
