@@ -7,8 +7,8 @@
 app.post('/addck', function (request, response) {
         try {
              const cookie = request.query.ck;
-             AutoAddCK(cookie, "");//这里逻辑请根据实际实现
-			       response.send({ err: 0, msg: '添加成功' });
+             AutoAddCK(cookie, "");//这里逻辑请根据实际实现新ck的后台添加等逻辑.
+	     response.send({ err: 0, msg: '添加成功' });
         }
         catch (err) {
             response.send({ err: 1, msg: err });
