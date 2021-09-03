@@ -3,7 +3,7 @@
 
 新增:配置文件中增加了上传到服务器的选项,可以把获取到的cookie,提交给指定服务器接口,如果你的面板支持,可以简化操作,减少手动复制粘贴.
 服务端接口示例:
-'''JavaScript
+ ```JavaScript
 app.post('/addck', function (request, response) {
         try {
              const cookie = request.query.ck;
@@ -14,7 +14,7 @@ app.post('/addck', function (request, response) {
             response.send({ err: 1, msg: err });
         }
 })
-'''
+ ```
 
 
 主要提供了验证码登录并自动获取cookie功能,规避夸地域登录判定导致的登陆失败. 
