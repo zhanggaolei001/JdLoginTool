@@ -1,3 +1,5 @@
+后端面板接口使用示例项目:https://github.com/zhanggaolei001/raypanel
+
 一个基于CefSharp的京东cookie获取工具
 运行后,登录京东,会自动将cookie复制到粘贴板.
 
