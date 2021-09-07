@@ -13,6 +13,10 @@ namespace JdLoginTool.Wpf
         {
             InitializeComponent();
             Browser.TitleChanged += Browser_TitleChanged;
+            this.Loaded += (o, e) =>
+            {
+                Browser.Address = "https://plogin.m.jd.com/login/login?appid=300&returnurl=https://wq.jd.com/passport/LoginRedirect";
+            };
         }
 
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
