@@ -2,8 +2,11 @@
 
 一个基于CefSharp的京东cookie获取工具
 运行后,登录京东,会自动将cookie复制到粘贴板.
-新增:上传青龙支持,青龙服务器地址及授权秘钥等设置是在JdLoginTool.dll.config文件中.
-新增:配置文件中增加了上传到服务器的选项,可以把获取到的cookie,提交给指定服务器接口,如果你的面板支持,可以简化操作,减少手动复制粘贴.
+
+#2021.10.09新增:上传青龙支持,青龙服务器地址及授权秘钥等设置是在JdLoginTool.dll.config文件中.
+
+#新增:配置文件中增加了上传到服务器的选项,可以把获取到的cookie,提交给指定服务器接口,如果你的面板支持,可以简化操作,减少手动复制粘贴.
+
 服务端接口示例:
  ```JavaScript
 app.post('/addck', function (request, response) {
@@ -35,5 +38,12 @@ app.post('/addck', function (request, response) {
 2. 迫于wpf未跨平台,仅用于windows下使用.
 3. 可以直接下载编译过的. [release](https://github.com/zhanggaolei001/JdLoginTool/releases)
 4. 如果有安全警告,可添加信任或临时关闭安全软件.
-## 最后
-别忘了点亮那颗星哦
+
+## 点亮那颗星
+
+## 扫一扫领个红包
+
+##
+ 
+
+![hb](https://user-images.githubusercontent.com/26429121/136640958-c54e38d4-22a1-4f8e-aef1-f769a7a074f2.jpg)
