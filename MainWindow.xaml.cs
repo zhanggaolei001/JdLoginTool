@@ -30,14 +30,15 @@ namespace JdLoginTool.Wpf
                 ICookieManager cm = Browser.WebBrowser.GetCookieManager();
                 var visitor = new TaskCookieVisitor();
                 cm.VisitAllCookies(visitor);
-                ck = visitor.Task.Result.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin").Aggregate(ck, (current, cookie) => current + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};");
-
+                var cks = visitor.Task.Result; 
+                ck = cks.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin").Aggregate(ck, (current, cookie) => current + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};");
                 if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
                 {
                     Clipboard.SetText(ck);
                     UploadToServer(ck);
                     UploadToQingLong(ck);
-                    cm.DeleteCookies(".jd.com", "");
+                    cm.DeleteCookies(".jd.com", "pt_key");
+                    cm.DeleteCookies(".jd.com", "pt_pin");
                     Browser.Address = "m.jd.com";
                 }
             }));

@@ -47,14 +47,8 @@ namespace JdLoginTool.Wpf
             Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
 
             var app = new App();
-            app.InitializeComponent();
-            app.Exit += CleanCache;
+            app.InitializeComponent(); 
             return app.Run();
-        }
-
-        private static void CleanCache(object sender, System.Windows.ExitEventArgs e)
-        {
-            Cef.GetGlobalCookieManager().DeleteCookies(".jd.com", "");
-        }
+        } 
     }
 }
