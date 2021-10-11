@@ -37,8 +37,8 @@ namespace JdLoginTool.Wpf
                     Clipboard.SetText(ck);
                     UploadToServer(ck);
                     UploadToQingLong(ck);
-
-                    Application.Current.Shutdown();
+                    cm.DeleteCookies(".jd.com", "");
+                    Browser.Address = "m.jd.com";
                 }
             }));
         }
@@ -65,7 +65,7 @@ namespace JdLoginTool.Wpf
                 //todo:检测是新ck还是老ck,即是否是更新.
                 //暂不实现,是否登陆重复先自己搞吧.
 
-              
+
                 var client = new RestClient($"{qlUrl}/open/envs");
                 client.Timeout = -1;
                 var request = new RestRequest(Method.POST);
@@ -118,7 +118,7 @@ namespace JdLoginTool.Wpf
                     var request = new RestRequest(method == "post" ? Method.POST : Method.GET);
                     var response = client.Execute(request);
                     Console.WriteLine(response.Content);
-                    MessageBox.Show(ck, "Cookie已上传服务器,且已复制到剪切板");
+                    MessageBox.Show(ck, "Cookie已上传服务器");
                 }
                 catch (Exception e)
                 {

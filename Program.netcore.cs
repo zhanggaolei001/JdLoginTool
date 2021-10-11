@@ -15,7 +15,7 @@ namespace JdLoginTool.Wpf
         {
             //For Windows 7 and above, app.manifest entries will take precedences of this call
             Cef.EnableHighDPISupport();
-            
+
 
             //We are using our current exe as the BrowserSubProcess
             //Multiple instances will be spawned to handle all the 
@@ -54,7 +54,7 @@ namespace JdLoginTool.Wpf
 
         private static void CleanCache(object sender, System.Windows.ExitEventArgs e)
         {
-            Cef.GetGlobalCookieManager().DeleteCookies("", "");
+            Cef.GetGlobalCookieManager().DeleteCookies(".jd.com", "");
         }
     }
 }
