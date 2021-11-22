@@ -3,6 +3,7 @@ using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -50,7 +51,22 @@ namespace JdLoginTool.Wpf
                 var visitor = new TaskCookieVisitor();
                 cm.VisitAllCookies(visitor);
                 var cks = visitor.Task.Result;
-                ck = cks.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin").Aggregate(ck, (current, cookie) => current + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};");
+
+                foreach (var cookie in cks)
+                {
+                    Regex reg = new Regex(@"[\u4e00-\u9fa5]");
+                    if (reg.IsMatch(cookie.Value))
+                    {
+                        if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
+                      
+                    }
+                    else
+                    {
+                        if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={cookie.Value};";
+                    }
+
+                }
+
                 if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
                 {
                     Clipboard.SetText(ck);
@@ -87,7 +103,7 @@ namespace JdLoginTool.Wpf
                 if (input.ShowDialog() == true)
                 {
                     remarks = input.Remarkers;
-                } 
+                }
                 var client = new RestClient($"{qlUrl}/open/envs") { Timeout = -1 };
                 var request = new RestRequest();
                 request.AddHeader("Authorization", $"Bearer {qlToken}");
@@ -112,10 +128,10 @@ namespace JdLoginTool.Wpf
             client.Timeout = -1;
             var request = new RestRequest(Method.GET);
             request.AddHeader("Authorization", $"Bearer {qlToken}");
-            request.AddHeader("Content-Type", "application/json"); 
+            request.AddHeader("Content-Type", "application/json");
             var response = client.Execute(request);
             var result = JsonConvert.DeserializeObject<GetCookiesResult>(response.Content);
-            if (result==null)
+            if (result == null)
             {
                 return true;
             }
@@ -126,7 +142,7 @@ namespace JdLoginTool.Wpf
             if (result.data.Any(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin))
             {
                 return false;
-            } 
+            }
             return true;
         }
 
