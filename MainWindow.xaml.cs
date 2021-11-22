@@ -3,8 +3,11 @@ using System.Configuration;
 using System.Linq;
 using System.Net;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using CefSharp;
+using HtmlAgilityPack;
 using Newtonsoft.Json;
 using RestSharp;
 
@@ -16,12 +19,28 @@ namespace JdLoginTool.Wpf
         {
             InitializeComponent();
             Browser.TitleChanged += Browser_TitleChanged;
+            Browser.KeyUp += TryGetUserInputPhone;
             this.Loaded += (o, e) =>
             {
                 Browser.Address = "m.jd.com";
             };
+
         }
 
+        private async void TryGetUserInputPhone(object sender, KeyEventArgs e)
+        {
+            string script = "function get_phone(){\r\n" +
+                            "return document.querySelector('#app>div>div:nth-child(3)>p:nth-child(1)>input').value;\r\n" +
+                            "}\r\n" +
+                            "get_phone();";
+            await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
+            {
+                var resp = respA.Result;    //respObj此时有两个属性: name、age
+                dynamic respObj = resp.Result;
+                PhoneNumber = (string)resp.Result;
+            }));
+        }
+        public String PhoneNumber { get; set; }
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             string ck = "";
@@ -30,7 +49,7 @@ namespace JdLoginTool.Wpf
                 ICookieManager cm = Browser.WebBrowser.GetCookieManager();
                 var visitor = new TaskCookieVisitor();
                 cm.VisitAllCookies(visitor);
-                var cks = visitor.Task.Result; 
+                var cks = visitor.Task.Result;
                 ck = cks.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin").Aggregate(ck, (current, cookie) => current + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};");
                 if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
                 {
@@ -41,6 +60,7 @@ namespace JdLoginTool.Wpf
                     cm.DeleteCookies(".jd.com", "pt_pin");
                     Browser.Address = "m.jd.com";
                 }
+                //todo:检测当前页面内容,如果存在
             }));
         }
 
@@ -48,10 +68,7 @@ namespace JdLoginTool.Wpf
         private void UploadToQingLong(string ck)
         {
             var qlUrl = ConfigurationManager.AppSettings["qlUrl"];
-            if (string.IsNullOrWhiteSpace(qlUrl))
-            {
-                return;
-            }
+            if (string.IsNullOrWhiteSpace(qlUrl)) return;
             try
             {
                 if (string.IsNullOrWhiteSpace(qlToken))
@@ -63,18 +80,22 @@ namespace JdLoginTool.Wpf
                     MessageBox.Show("登陆青龙失败:获取Token失败");
                     return;
                 }
-                //todo:检测是新ck还是老ck,即是否是更新.
-                //暂不实现,是否登陆重复先自己搞吧.
-
-
-                var client = new RestClient($"{qlUrl}/open/envs");
-                client.Timeout = -1;
-                var request = new RestRequest(Method.POST);
+                var jck = JDCookie.parse(ck);
+                var input = new InputWindow();
+                string remarks = PhoneNumber ?? jck.ptPin;//正常应该就是手机号了,如果开发的有问题,拿错手机号会用ptPin
+                input.Remarkers = remarks;
+                if (input.ShowDialog() == true)
+                {
+                    remarks = input.Remarkers;
+                } 
+                var client = new RestClient($"{qlUrl}/open/envs") { Timeout = -1 };
+                var request = new RestRequest();
                 request.AddHeader("Authorization", $"Bearer {qlToken}");
                 request.AddHeader("Content-Type", "application/json");
-                var body = $"[{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\"}}]";
+                var body = $"[{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\"}}]";
                 request.AddParameter("application/json", body, ParameterType.RequestBody);
-                IRestResponse response = client.Execute(request);
+                request.Method = CheckIsNewUser(qlUrl, ck) ? Method.POST : Method.PUT;
+                var response = client.Execute(request);
                 Console.WriteLine(response.Content);
                 MessageBox.Show(response.Content, "上传青龙成功(Cookie已复制到剪切板)");
             }
@@ -84,7 +105,30 @@ namespace JdLoginTool.Wpf
             }
         }
 
-
+        private bool CheckIsNewUser(string qlUrl, string ck)
+        {
+            var newCk = JDCookie.parse(ck);
+            var client = new RestClient($"{qlUrl}/open/envs");
+            client.Timeout = -1;
+            var request = new RestRequest(Method.GET);
+            request.AddHeader("Authorization", $"Bearer {qlToken}");
+            request.AddHeader("Content-Type", "application/json"); 
+            var response = client.Execute(request);
+            var result = JsonConvert.DeserializeObject<GetCookiesResult>(response.Content);
+            if (result==null)
+            {
+                return true;
+            }
+            if (result.code != 200)
+            {
+                throw new Exception($"请求返回失败,代码:{result.code}");
+            }
+            if (result.data.Any(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin))
+            {
+                return false;
+            } 
+            return true;
+        }
 
         private void GetQingLongToken()
         {
@@ -149,19 +193,28 @@ namespace JdLoginTool.Wpf
         public static JDCookie parse(String ck)
         {
             JDCookie jdCookie = new JDCookie();
-            String[] split = ck.Split(";");
-            foreach (var s in split)
+            try
             {
-                if (s.StartsWith("pt_key"))
-                {
-                    jdCookie.ptKey = (s.Split("=")[1]);
-                }
-                if (s.StartsWith("pt_pin"))
-                {
-                    jdCookie.ptPin = (s.Split("=")[1]);
-                }
-            }
 
+                String[] split = ck.Split(";");
+                foreach (var s in split)
+                {
+                    if (s.StartsWith("pt_key"))
+                    {
+                        jdCookie.ptKey = (s.Split("=")[1]);
+                    }
+                    if (s.StartsWith("pt_pin"))
+                    {
+                        jdCookie.ptPin = (s.Split("=")[1]);
+                    }
+                }
+                return jdCookie;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                jdCookie = new JDCookie();
+            }
             return jdCookie;
         }
 
@@ -170,6 +223,29 @@ namespace JdLoginTool.Wpf
         {
             return "pt_key=" + ptKey + ";pt_pin=" + ptPin + ";";
         }
+    }
+
+    public class GetCookiesResult
+    {
+        public int code { get; set; }
+        public Datum[] data { get; set; }
+    }
+
+
+
+
+
+
+    public class Datum
+    {
+        public string value { get; set; }
+        public string _id { get; set; }
+        public long created { get; set; }
+        public int status { get; set; }
+        public string timestamp { get; set; }
+        public float position { get; set; }
+        public string name { get; set; }
+        public string remarks { get; set; }
     }
 
 }

@@ -1,0 +1,35 @@
+﻿<Window x:Class="JdLoginTool.Wpf.InputWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:JdLoginTool.Wpf"
+        WindowStartupLocation="CenterScreen"
+        mc:Ignorable="d"
+        Title="备注填写"
+        Height="120"
+        Width="300">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="5">
+            <Label>请输入备注</Label>
+            <TextBox Name="TextBox"
+                     Width="200"></TextBox>
+        </StackPanel>
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="5">
+            <Button Margin="3" IsDefault="True" Width="80"
+                    Click="OkClicked">确定</Button>
+            <Button  Margin="3"
+                     Width="80"
+                     Click="CancelClicked">取消</Button>
+        </StackPanel>
+    </Grid>
+</Window>
