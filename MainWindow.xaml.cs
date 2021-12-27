@@ -58,7 +58,7 @@ namespace JdLoginTool.Wpf
                     if (reg.IsMatch(cookie.Value))
                     {
                         if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
-                      
+
                     }
                     else
                     {
@@ -108,9 +108,19 @@ namespace JdLoginTool.Wpf
                 var request = new RestRequest();
                 request.AddHeader("Authorization", $"Bearer {qlToken}");
                 request.AddHeader("Content-Type", "application/json");
+                request.AddParameter("t", DateTimeOffset.Now.ToUnixTimeMilliseconds());
                 var body = $"[{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\"}}]";
+                if (CheckIsNewUser(qlUrl, ck, out var _eid))
+                {
+                    request.Method = Method.POST;
+                }
+                else
+                {
+                    body = $"{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\",\"_id\":\"{_eid}\"}}";
+                    request.Method = Method.PUT; 
+                }
+
                 request.AddParameter("application/json", body, ParameterType.RequestBody);
-                request.Method = CheckIsNewUser(qlUrl, ck) ? Method.POST : Method.PUT;
                 var response = client.Execute(request);
                 Console.WriteLine(response.Content);
                 MessageBox.Show(response.Content, "上传青龙成功(Cookie已复制到剪切板)");
@@ -120,8 +130,7 @@ namespace JdLoginTool.Wpf
                 MessageBox.Show(e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
             }
         }
-
-        private bool CheckIsNewUser(string qlUrl, string ck)
+        private bool CheckIsNewUser(string qlUrl, string ck, out string _eid)
         {
             var newCk = JDCookie.parse(ck);
             var client = new RestClient($"{qlUrl}/open/envs");
@@ -133,6 +142,7 @@ namespace JdLoginTool.Wpf
             var result = JsonConvert.DeserializeObject<GetCookiesResult>(response.Content);
             if (result == null)
             {
+                _eid = "";
                 return true;
             }
             if (result.code != 200)
@@ -141,8 +151,10 @@ namespace JdLoginTool.Wpf
             }
             if (result.data.Any(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin))
             {
+                _eid = result.data.FirstOrDefault(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin)?._id;
                 return false;
             }
+            _eid = "";
             return true;
         }
 
