@@ -76,9 +76,11 @@ namespace JdLoginTool.Wpf
                     }
                     catch (Exception exception)
                     {
-                        Console.WriteLine(exception);
+                        Console.WriteLine(exception); 
+                        File.AppendAllText("cookies.txt",DateTime.Now.ToString()+":"+ck);
+                        MessageBox.Show("复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息"+exception.Message);
                     }
-                    File.AppendAllText("cookies.txt",DateTime.Now.ToString()+":"+ck);
+                   
                     UploadToServer(ck);
                     UploadToQingLong(ck);
                     cm.DeleteCookies(".jd.com", "pt_key");
