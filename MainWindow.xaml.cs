@@ -121,13 +121,13 @@ namespace JdLoginTool.Wpf
                 request.AddHeader("Content-Type", "application/json");
                 request.AddParameter("t", DateTimeOffset.Now.ToUnixTimeMilliseconds());
                 var body = $"[{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\"}}]";
-                if (CheckIsNewUser(qlUrl, ck, out var _eid))
+                if (CheckIsNewUser(qlUrl, ck, out var id))
                 {
                     request.Method = Method.POST;
                 }
                 else
                 {
-                    body = $"{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\",\"_id\":\"{_eid}\"}}";
+                    body = $"{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\",\"id\":{id}}}";
                     request.Method = Method.PUT;
                 }
 
@@ -141,7 +141,7 @@ namespace JdLoginTool.Wpf
                 MessageBox.Show(e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
             }
         }
-        private bool CheckIsNewUser(string qlUrl, string ck, out string _eid)
+        private bool CheckIsNewUser(string qlUrl, string ck, out int id)
         {
             var newCk = JDCookie.parse(ck);
             var client = new RestClient($"{qlUrl}/open/envs");
@@ -153,7 +153,7 @@ namespace JdLoginTool.Wpf
             var result = JsonConvert.DeserializeObject<GetCookiesResult>(response.Content);
             if (result == null)
             {
-                _eid = "";
+                id = 0;
                 return true;
             }
             if (result.code != 200)
@@ -162,10 +162,20 @@ namespace JdLoginTool.Wpf
             }
             if (result.data.Any(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin))
             {
-                _eid = result.data.FirstOrDefault(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin)?._id;
+                var firstOrDefault = result.data.FirstOrDefault(jck => newCk.ptPin != null && JDCookie.parse(jck.value).ptPin == newCk.ptPin);
+                if (firstOrDefault != null)
+                {
+                    id = firstOrDefault.id;
+                }
+                else
+                {
+                    id = 0;
+                    return true;
+                }
+
                 return false;
             }
-            _eid = "";
+            id = 0;
             return true;
         }
 
@@ -278,7 +288,7 @@ namespace JdLoginTool.Wpf
     public class Datum
     {
         public string value { get; set; }
-        public string _id { get; set; }
+        public int id { get; set; }
         public long created { get; set; }
         public int status { get; set; }
         public string timestamp { get; set; }
