@@ -3,4 +3,14 @@
   <PropertyGroup>
     <_LastSelectedProfileId>C:\Users\Administrator\Desktop\CustomRuntime-dotnetDemo\JdTry\src\JdIOSWebLoginTool\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Update="InputWindow.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="InputWindow.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
 </Project>
