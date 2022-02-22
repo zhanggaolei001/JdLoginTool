@@ -10,7 +10,7 @@
         Height="822">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="50" />
             <RowDefinition Height="812" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -31,7 +31,7 @@
                 <ColumnDefinition Width="Auto" /> 
 
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="txtBoxAddress"
+            <TextBox Visibility="Collapsed" x:Name="txtBoxAddress"
                      Text="{Binding Address, ElementName=Browser, FallbackValue=m.jd.com}" 
                      FontSize="12"
 
@@ -41,15 +41,25 @@
                     <behaviours:TextBoxBindingUpdateOnEnterBehaviour />
                 </behaviors:Interaction.Behaviors>
             </TextBox>
-            <Button Content="重新加载" 
+            <!--<Button Content="重新加载" 
                     Grid.Column="1"
                     Command="{Binding ElementName=Browser,Path=ReloadCommand}"
-                    Width="80" /> 
+                    Width="80" />-->
+            <Button Content="填写剪切板中的手机号"
+                    Grid.Column="1"
+                    Click="ButtonBase_OnClick"
+                      Width="130" />
+            <Button Content="填写剪切板中的验证码"
+                    Grid.Column="2"
+                    Click="ButtonSetCaptcha_OnClick"
+                    Width="130" />
         </Grid>
         <Border Grid.Row="1"
                 BorderBrush="Gray"
                 BorderThickness="0,1">
             <wpf:ChromiumWebBrowser x:Name="Browser"
+                                    MouseRightButtonDown="Browser_OnMouseRightButtonDown"
+                    MouseRightButtonUp="Browser_OnMouseRightButtonUp"
                                     Address="https://m.jd.com/">
                 <behaviors:Interaction.Behaviors>
                     <behaviours:HoverLinkBehaviour x:Name="HoverLinkBehaviour" />

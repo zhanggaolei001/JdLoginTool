@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -15,6 +16,24 @@ using RestSharp;
 
 namespace JdLoginTool.Wpf
 {
+    public class MenuHandler : IContextMenuHandler
+    {
+        public void OnBeforeContextMenu(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model)
+        {
+            model.Clear();
+        }
+        public bool OnContextMenuCommand(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, CefMenuCommand commandId, CefEventFlags eventFlags)
+        {
+            return false;
+        }
+        public void OnContextMenuDismissed(IWebBrowser browserControl, IBrowser browser, IFrame frame)
+        {
+        }
+        public bool RunContextMenu(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model, IRunContextMenuCallback callback)
+        {
+            return false;
+        }
+    }
     public partial class MainWindow : Window
     {
         public MainWindow()
@@ -26,8 +45,12 @@ namespace JdLoginTool.Wpf
             {
                 Browser.Address = "m.jd.com";
             };
-
+            Browser.MenuHandler = new MenuHandler();
         }
+
+
+
+
 
         private async void TryGetUserInputPhone(object sender, KeyEventArgs e)
         {
@@ -47,48 +70,97 @@ namespace JdLoginTool.Wpf
         {
             string ck = "";
             this.Browser.Dispatcher.Invoke(new Action(() =>
+           {
+
+               ICookieManager cm = Browser.WebBrowser.GetCookieManager();
+               var visitor = new TaskCookieVisitor();
+               cm.VisitAllCookies(visitor);
+               var cks = visitor.Task.Result;
+
+               foreach (var cookie in cks)
+               {
+                   Regex reg = new Regex(@"[\u4e00-\u9fa5]");
+                   if (reg.IsMatch(cookie.Value))
+                   {
+                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
+
+                   }
+                   else
+                   {
+                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={cookie.Value};";
+                   }
+
+               }
+
+               if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
+               {
+                   try
+                   {
+                       Clipboard.SetText(ck);
+                   }
+                   catch (Exception exception)
+                   {
+                       Console.WriteLine(exception);
+                       File.AppendAllText("cookies.txt", DateTime.Now.ToString() + ":" + ck);
+                       MessageBox.Show("复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
+                   }
+
+                   UploadToServer(ck);
+                   UploadToQingLong(ck);
+                   cm.DeleteCookies(".jd.com", "pt_key");
+                   cm.DeleteCookies(".jd.com", "pt_pin");
+                   Browser.Address = "m.jd.com";
+               }
+
+           }));
+
+        }
+
+        private async void SetPhone(string phone)
+        {
+            try
             {
-                ICookieManager cm = Browser.WebBrowser.GetCookieManager();
-                var visitor = new TaskCookieVisitor();
-                cm.VisitAllCookies(visitor);
-                var cks = visitor.Task.Result;
+                var script = "if (!document.querySelector(`#app > div > p.policy_tip > input`).checked) {\r\n" +
+                             "  document.querySelector(`#app > div > p.policy_tip > input`).checked=true;\r\n" +
+                             "  var xresult = document.evaluate(`//*[@id='app']/div/div[3]/p[1]/input`, document, null, XPathResult.ANY_TYPE, null);" +
+                             $"  var p=xresult.iterateNext();p.value=`{phone}`;" +
+                             "  p.dispatchEvent(new Event('input'));\r\n }";
+                var result = await Browser.EvaluateScriptAsPromiseAsync(script);
 
-                foreach (var cookie in cks)
-                {
-                    Regex reg = new Regex(@"[\u4e00-\u9fa5]");
-                    if (reg.IsMatch(cookie.Value))
-                    {
-                        if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
+            }
+            catch (Exception e)
+            {
 
-                    }
-                    else
-                    {
-                        if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={cookie.Value};";
-                    }
+            }
 
-                }
+        }
+        private bool SetCaptcha(string captcha)
+        {
+            try
+            {
+                Browser.EvaluateScriptAsPromiseAsync($"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{captcha}\";p.dispatchEvent(new Event('input'));");
+                return true;
+            }
+            catch (Exception e)
+            {
+                return false;
+            }
+        }
+        private async Task<bool> ClickLoginButton()
+        {
+            try
+            {
+                Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                Thread.Sleep(500);
+                var result = await Browser.EvaluateScriptAsync(" var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
 
-                if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
-                {
-                    try
-                    {
-                        Clipboard.SetText(ck);
-                    }
-                    catch (Exception exception)
-                    {
-                        Console.WriteLine(exception); 
-                        File.AppendAllText("cookies.txt",DateTime.Now.ToString()+":"+ck);
-                        MessageBox.Show("复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息"+exception.Message);
-                    }
-                   
-                    UploadToServer(ck);
-                    UploadToQingLong(ck);
-                    cm.DeleteCookies(".jd.com", "pt_key");
-                    cm.DeleteCookies(".jd.com", "pt_pin");
-                    Browser.Address = "m.jd.com";
-                }
-                //todo:检测当前页面内容,如果存在
-            }));
+                return result.Success;
+            }
+            catch (Exception e)
+            {
+
+                return false;
+            }
         }
 
         private string qlToken = "";
@@ -218,6 +290,63 @@ namespace JdLoginTool.Wpf
                 {
                     MessageBox.Show(e.Message);
                 }
+            }
+        }
+
+        private void Browser_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void Browser_OnMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            //todo:获取剪切板的号码17682487263
+            var phone = Clipboard.GetText();
+            if (IsPhoneNumber(phone))
+            {
+                SetPhone(phone);
+                ClickGetCaptchaButton();
+            }
+            else
+            {
+                SetPhone("");
+            }
+
+        }
+        public static bool IsPhoneNumber(string phoneNumber)
+        {
+            return Regex.IsMatch(phoneNumber, @"^1(3[0-9]|5[0-9]|7[6-8]|8[0-9])[0-9]{8}$");
+        }
+        public static bool IsCaptcha(string captcha)
+        {
+            return Regex.IsMatch(captcha, @"^\d{6}$");
+        }
+        private bool ClickGetCaptchaButton()
+        {
+            try
+            {
+                var result = Browser.EvaluateScriptAsync("document.querySelector('#app div button').click()");
+
+                return result.Result.Success;
+            }
+            catch (Exception e)
+            {
+               
+                return false;
+            }
+        }
+        private async void ButtonSetCaptcha_OnClick(object sender, RoutedEventArgs e)
+        {
+            var captcha = Clipboard.GetText();
+            if (IsCaptcha(captcha))
+            {
+                SetCaptcha(captcha);
+                await ClickLoginButton();
             }
         }
     }
