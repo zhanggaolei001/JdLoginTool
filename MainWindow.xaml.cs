@@ -305,7 +305,7 @@ namespace JdLoginTool.Wpf
 
         private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
         {
-            //todo:获取剪切板的号码17682487263
+            
             var phone = Clipboard.GetText();
             if (IsPhoneNumber(phone))
             {
