@@ -9,32 +9,34 @@
         Width="375"
         Height="822">
     <Grid>
+        <Grid.Resources>
+            <Style TargetType="{x:Type Button}">
+                <Setter Property="Margin"
+                        Value="2,5" />
+            </Style>
+            <Style TargetType="{x:Type TextBox}">
+                <Setter Property="Margin"
+                        Value="2,5" />
+            </Style>
+        </Grid.Resources>
         <Grid.RowDefinitions>
-            <RowDefinition Height="50" />
-            <RowDefinition Height="812" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid>
-            <Grid.Resources>
-                <Style TargetType="{x:Type Button}">
-                    <Setter Property="Margin"
-                            Value="2,5" />
-                </Style>
-                <Style TargetType="{x:Type TextBox}">
-                    <Setter Property="Margin"
-                            Value="2,5" />
-                </Style>
-            </Grid.Resources>
+
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" /> 
-                <ColumnDefinition Width="Auto" /> 
-                <ColumnDefinition Width="Auto" /> 
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
 
             </Grid.ColumnDefinitions>
-            <TextBox Visibility="Collapsed" x:Name="txtBoxAddress"
-                     Text="{Binding Address, ElementName=Browser, FallbackValue=m.jd.com}" 
+            <TextBox Visibility="Collapsed"
+                     x:Name="txtBoxAddress"
+                     Text="{Binding Address, ElementName=Browser, FallbackValue=m.jd.com}"
                      FontSize="12"
-
                      BorderBrush="Gray"
                      BorderThickness="1">
                 <behaviors:Interaction.Behaviors>
@@ -45,64 +47,35 @@
                     Grid.Column="1"
                     Command="{Binding ElementName=Browser,Path=ReloadCommand}"
                     Width="80" />-->
-            <Button Content="填写剪切板中的手机号"
-                    Grid.Column="1"
-                    Click="ButtonBase_OnClick"
-                      Width="130" />
-            <Button Content="填写剪切板中的验证码"
-                    Grid.Column="2"
-                    Click="ButtonSetCaptcha_OnClick"
-                    Width="130" />
+
         </Grid>
         <Border Grid.Row="1"
                 BorderBrush="Gray"
                 BorderThickness="0,1">
             <wpf:ChromiumWebBrowser x:Name="Browser"
                                     MouseRightButtonDown="Browser_OnMouseRightButtonDown"
-                    MouseRightButtonUp="Browser_OnMouseRightButtonUp"
+                                    MouseRightButtonUp="Browser_OnMouseRightButtonUp"
                                     Address="https://m.jd.com/">
                 <behaviors:Interaction.Behaviors>
                     <behaviours:HoverLinkBehaviour x:Name="HoverLinkBehaviour" />
                 </behaviors:Interaction.Behaviors>
             </wpf:ChromiumWebBrowser>
         </Border>
-        <ProgressBar IsIndeterminate="{Binding IsLoading, ElementName=Browser}"
-                     HorizontalAlignment="Stretch"
-                     VerticalAlignment="Top"
-                     Width="Auto"
-                     Grid.Row="1"
-                     Height="2"
-                     Visibility="{Binding IsLoading, ElementName=Browser, Converter={StaticResource BooleanToVisibilityConverter}}"
-                     BorderThickness="0" />
-        <StatusBar Grid.Row="2"
-                   HorizontalAlignment="Stretch"
-                   HorizontalContentAlignment="Stretch">
-            <StatusBar.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                    </Grid>
-                </ItemsPanelTemplate>
-            </StatusBar.ItemsPanel>
-            <StatusBarItem Grid.Column="0">
-                <TextBlock Text="{Binding HoverLink, ElementName=HoverLinkBehaviour}"
-                           Grid.Column="2"
-                           HorizontalAlignment="Stretch"
-                           VerticalAlignment="Center" />
-            </StatusBarItem>
-            <Separator Grid.Column="1" />
-            <StatusBarItem Grid.Column="2">
-                <TextBlock HorizontalAlignment="Right"
-                           TextAlignment="Right"
-                           Grid.Column="3"
-                           VerticalAlignment="Center">
-                Chromium: <Run Text="{Binding Source={x:Static cef:Cef.ChromiumVersion}, Mode=OneTime}" />, CEF: <Run Text="{Binding Source={x:Static cef:Cef.CefVersion}, Mode=OneTime}" />, CefSharp: <Run Text="{Binding Source={x:Static cef:Cef.CefSharpVersion}, Mode=OneTime}" />, Environment: <Run Text="{Binding Converter={StaticResource EnvironmentConverter}, Mode=OneTime}" />
-                </TextBlock>
-            </StatusBarItem>
-        </StatusBar>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Center">
+            <Button Content="拿剪切板中的手机号"
+                    Height="50"
+                    Margin="5"
+                    Click="ButtonBase_OnClick"
+                    Width="130" />
+            <Button Content="拿剪切板中的验证码"
+                    Height="50"
+                    Margin="5"
+                    Click="ButtonSetCaptcha_OnClick"
+                    Width="130" />
+        </StackPanel>
+
     </Grid>
 </Window>

@@ -102,7 +102,7 @@ namespace JdLoginTool.Wpf
                    {
                        Console.WriteLine(exception);
                        File.AppendAllText("cookies.txt", DateTime.Now.ToString() + ":" + ck);
-                       MessageBox.Show("复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
+                       MessageBox.Show(this, "复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
                    }
 
                    UploadToServer(ck);
@@ -176,7 +176,7 @@ namespace JdLoginTool.Wpf
                 }
                 if (string.IsNullOrWhiteSpace(qlToken))
                 {
-                    MessageBox.Show("登陆青龙失败:获取Token失败");
+                    MessageBox.Show(this, "登陆青龙失败:获取Token失败");
                     return;
                 }
                 var jck = JDCookie.parse(ck);
@@ -206,11 +206,11 @@ namespace JdLoginTool.Wpf
                 request.AddParameter("application/json", body, ParameterType.RequestBody);
                 var response = client.Execute(request);
                 Console.WriteLine(response.Content);
-                MessageBox.Show(response.Content, "上传青龙成功(Cookie已复制到剪切板)");
+                MessageBox.Show(this,response.Content, "上传青龙成功(Cookie已复制到剪切板)");
             }
             catch (Exception e)
             {
-                MessageBox.Show(e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
+                MessageBox.Show(this, e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
             }
         }
         private bool CheckIsNewUser(string qlUrl, string ck, out int id)
@@ -268,7 +268,7 @@ namespace JdLoginTool.Wpf
             }
         }
 
-        private static void UploadToServer(string ck)
+        private  void UploadToServer(string ck)
         {
             var upload = ConfigurationManager.AppSettings["upload"] == "true";
             var ckServer = ConfigurationManager.AppSettings["server"];
@@ -284,11 +284,11 @@ namespace JdLoginTool.Wpf
                     var request = new RestRequest(method == "post" ? Method.POST : Method.GET);
                     var response = client.Execute(request);
                     Console.WriteLine(response.Content);
-                    MessageBox.Show(ck, "Cookie已上传服务器");
+                    MessageBox.Show(this, ck, "Cookie已上传服务器");
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show(e.Message);
+                    MessageBox.Show(this, e.Message);
                 }
             }
         }
