@@ -121,7 +121,7 @@ namespace JdLoginTool.Wpf
             try
             {
                 var script = "if (!document.querySelector(`#app > div > p.policy_tip > input`).checked) {\r\n" +
-                             "  document.querySelector(`#app > div > p.policy_tip > input`).checked=true;\r\n" +
+                             "  \r\n" +
                              "  var xresult = document.evaluate(`//*[@id='app']/div/div[3]/p[1]/input`, document, null, XPathResult.ANY_TYPE, null);" +
                              $"  var p=xresult.iterateNext();p.value=`{phone}`;" +
                              "  p.dispatchEvent(new Event('input'));\r\n }";
@@ -150,7 +150,7 @@ namespace JdLoginTool.Wpf
         {
             try
             {
-                Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                await  Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
                 Thread.Sleep(500);
                 var result = await Browser.EvaluateScriptAsync(" var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
 
