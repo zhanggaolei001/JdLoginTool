@@ -7,7 +7,7 @@
         xmlns:behaviors="http://schemas.microsoft.com/xaml/behaviors"
         Title="{Binding Path=Title, ElementName=Browser, Converter={StaticResource TitleConverter}}"
         Width="375"
-        Height="822">
+        Height="700">
     <Grid>
         <Grid.Resources>
             <Style TargetType="{x:Type Button}">
@@ -63,18 +63,26 @@
         </Border>
 
         <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center">
-            <Button Content="拿剪切板中的手机号"
+                    Orientation="Horizontal"   >
+            <TextBox x:Name="TextBox" Width="100"></TextBox> 
+            <Button Content="拿手机号"
                     Height="50"
+                    ToolTip="复制好手机号后点击这个按钮,自动帮你填写好,并进入绘制图案步骤,然后就会自动发送验证码"
                     Margin="5"
                     Click="ButtonBase_OnClick"
-                    Width="130" />
-            <Button Content="拿剪切板中的验证码"
+                    Width="80" />
+            <Button Content="拿验证码"
+                    ToolTip="复制好验证码后点击这个按钮,会自动帮你填写好验证码,并执行下一步的登陆等步骤."
                     Height="50"
                     Margin="5"
                     Click="ButtonSetCaptcha_OnClick"
-                    Width="130" />
+                    Width="80" />
+            <Button Content="身份证"
+                    ToolTip=""
+                    Height="50"
+                    Margin="5"
+                    Click="ButtonHandleId_OnClick"
+                    Width="80" />
         </StackPanel>
 
     </Grid>

@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -36,8 +38,11 @@ namespace JdLoginTool.Wpf
     }
     public partial class MainWindow : Window
     {
+        private Dictionary<string, string> phone_id2_4;
         public MainWindow()
         {
+            var j = File.ReadAllText("cache.json");
+            phone_id2_4 = JsonConvert.DeserializeObject<Dictionary<string, string>>(j);
             InitializeComponent();
             Browser.TitleChanged += Browser_TitleChanged;
             Browser.KeyUp += TryGetUserInputPhone;
@@ -46,11 +51,22 @@ namespace JdLoginTool.Wpf
                 Browser.Address = "m.jd.com";
             };
             Browser.MenuHandler = new MenuHandler();
+            Browser.FrameLoadEnd += Browser_FrameLoadEnd;
+
+            this.Closing += (o, e) =>
+            {
+                var json = JsonConvert.SerializeObject(phone_id2_4, Formatting.Indented);
+                Console.WriteLine(json);
+                File.WriteAllText("cache.json", json);
+            };
         }
 
 
 
-
+        private void Browser_FrameLoadEnd(object sender, FrameLoadEndEventArgs e)
+        {
+            JumpToLoginPage();
+        }
 
         private async void TryGetUserInputPhone(object sender, KeyEventArgs e)
         {
@@ -65,6 +81,24 @@ namespace JdLoginTool.Wpf
                 PhoneNumber = (string)resp.Result;
             }));
         }
+        private async void JumpToLoginPage()
+        {
+            var title = "";
+            Browser.Dispatcher.Invoke(() => { title = Browser.Title; });
+            Trace.WriteLine(title);
+            if (title == "多快好省，购物上京东！")
+            {
+                string script = "document.querySelector('#msShortcutLogin').click()";
+                await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
+                {
+                    var resp = respA.Result;    //respObj此时有两个属性: name、age
+                    dynamic respObj = resp.Result;
+                    Trace.WriteLine((string)resp.Result);
+                }));
+            }
+
+        }
+
         public String PhoneNumber { get; set; }
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
@@ -132,25 +166,34 @@ namespace JdLoginTool.Wpf
             {
 
             }
+            finally
+            {
+                TextBox.Clear();
+            }
 
         }
         private bool SetCaptcha(string captcha)
         {
             try
             {
-                Browser.EvaluateScriptAsPromiseAsync($"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{captcha}\";p.dispatchEvent(new Event('input'));");
+                Browser.EvaluateScriptAsPromiseAsync(
+                    $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{captcha}\";p.dispatchEvent(new Event('input'));");
                 return true;
             }
             catch (Exception e)
             {
                 return false;
             }
+            finally
+            {
+                TextBox.Clear();  
+            }
         }
         private async Task<bool> ClickLoginButton()
         {
             try
             {
-                await  Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                await Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
                 Thread.Sleep(500);
                 var result = await Browser.EvaluateScriptAsync(" var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
 
@@ -206,7 +249,7 @@ namespace JdLoginTool.Wpf
                 request.AddParameter("application/json", body, ParameterType.RequestBody);
                 var response = client.Execute(request);
                 Console.WriteLine(response.Content);
-                MessageBox.Show(this,response.Content, "上传青龙成功(Cookie已复制到剪切板)");
+                MessageBox.Show(this, response.Content, "上传青龙成功(Cookie已复制到剪切板)");
             }
             catch (Exception e)
             {
@@ -268,7 +311,7 @@ namespace JdLoginTool.Wpf
             }
         }
 
-        private  void UploadToServer(string ck)
+        private void UploadToServer(string ck)
         {
             var upload = ConfigurationManager.AppSettings["upload"] == "true";
             var ckServer = ConfigurationManager.AppSettings["server"];
@@ -303,13 +346,19 @@ namespace JdLoginTool.Wpf
             e.Handled = true;
         }
 
+        private static string phone = "";
         private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
         {
-            
-            var phone = Clipboard.GetText();
+
+            phone = Clipboard.GetText();
+            if (!IsPhoneNumber(phone))
+            {
+                phone = TextBox.Text;
+            }
             if (IsPhoneNumber(phone))
             {
                 SetPhone(phone);
+               
                 ClickGetCaptchaButton();
             }
             else
@@ -318,6 +367,11 @@ namespace JdLoginTool.Wpf
             }
 
         }
+
+        //string GetId2_4(string phone)
+        //{
+        //    //todo:读取本地映射列表
+        //};
         public static bool IsPhoneNumber(string phoneNumber)
         {
             return Regex.IsMatch(phoneNumber, @"^1(3[0-9]|5[0-9]|7[6-8]|8[0-9])[0-9]{8}$");
@@ -336,18 +390,42 @@ namespace JdLoginTool.Wpf
             }
             catch (Exception e)
             {
-               
+
                 return false;
             }
         }
         private async void ButtonSetCaptcha_OnClick(object sender, RoutedEventArgs e)
         {
             var captcha = Clipboard.GetText();
+            if (!IsCaptcha(captcha))
+            {
+                captcha = TextBox.Text;
+            }
             if (IsCaptcha(captcha))
             {
                 SetCaptcha(captcha);
                 await ClickLoginButton();
             }
+        }
+
+        private void ButtonLogin_OnClick(object sender, RoutedEventArgs e)
+        {
+            JumpToLoginPage();
+        }
+
+        private void ButtonHandleId_OnClick(object sender, RoutedEventArgs e)
+        {
+            //todo 为了测试,先应该能够进行html打印
+            var html = Browser.GetSourceAsync().Result;
+            Trace.WriteLine(html);
+            if (phone_id2_4.ContainsKey(phone))
+            {
+                var id2_4 = phone_id2_4[phone];
+                TextBox.Text = id2_4;
+                //todo:sendkey
+
+            }
+            //todo:获取本次登陆手机号的缓存(或textbox输入内容解析)的身份证信息,然后自动点击验证身份证,自动输入,自动执行
         }
     }
 

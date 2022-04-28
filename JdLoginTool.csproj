@@ -41,6 +41,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="cache.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- TODO: These updates are currently required because CefSharp.Wpf specifies
          <Private>false</Private>, which means these libraries will not be specified in
          the .deps.json file, and so the CoreCLR wouldn't load these. -->
