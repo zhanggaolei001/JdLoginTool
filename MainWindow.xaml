@@ -83,6 +83,12 @@
                     Margin="5"
                     Click="ButtonHandleId_OnClick"
                     Width="80" />
+            <Button Content="查看源码"
+                    ToolTip=""
+                    Height="50"
+                    Margin="5"
+                    Click="ButtonBrowSource_OnClick"
+                    Width="80" />
         </StackPanel>
 
     </Grid>

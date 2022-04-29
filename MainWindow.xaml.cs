@@ -13,6 +13,7 @@ using System.Windows;
 using System.Windows.Input;
 using CefSharp;
 using HtmlAgilityPack;
+using JdLoginTool.Wpf.Model;
 using Newtonsoft.Json;
 using RestSharp;
 
@@ -38,11 +39,24 @@ namespace JdLoginTool.Wpf
     }
     public partial class MainWindow : Window
     {
-        private Dictionary<string, string> phone_id2_4;
+        public List<UserInfo> UserList { get; set; } = new List<UserInfo>();
         public MainWindow()
         {
+            /* "13250812637": "*3565",
+               "17682487263": "*1515",
+               "15236225781": "*2028",
+               "15103793217": "*3545",
+               "18317520679": "*0522"
+               */
             var j = File.ReadAllText("cache.json");
-            phone_id2_4 = JsonConvert.DeserializeObject<Dictionary<string, string>>(j);
+            if (!string.IsNullOrWhiteSpace(j))
+            {
+                var tmp = JsonConvert.DeserializeObject<List<UserInfo>>(j);
+                if (tmp.Any())
+                {
+                    UserList = tmp;
+                }
+            }
             InitializeComponent();
             Browser.TitleChanged += Browser_TitleChanged;
             Browser.KeyUp += TryGetUserInputPhone;
@@ -55,7 +69,7 @@ namespace JdLoginTool.Wpf
 
             this.Closing += (o, e) =>
             {
-                var json = JsonConvert.SerializeObject(phone_id2_4, Formatting.Indented);
+                var json = JsonConvert.SerializeObject(UserList, Formatting.Indented);
                 Console.WriteLine(json);
                 File.WriteAllText("cache.json", json);
             };
@@ -139,8 +153,10 @@ namespace JdLoginTool.Wpf
                        MessageBox.Show(this, "复制到剪切板失败,重启电脑可能就好了,已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
                    }
 
+                
                    UploadToServer(ck);
-                   UploadToQingLong(ck);
+                   UploadToQingLong(ck); 
+                   GetAndSaveUserInfo(ck);
                    cm.DeleteCookies(".jd.com", "pt_key");
                    cm.DeleteCookies(".jd.com", "pt_pin");
                    Browser.Address = "m.jd.com";
@@ -148,6 +164,89 @@ namespace JdLoginTool.Wpf
 
            }));
 
+        }
+
+        private void GetAndSaveUserInfo(string ck)
+        {
+            var client = new RestClient("https://wq.jd.com/deal/recvaddr/getrecvaddrlistV3?adid=&locationid=undefined&callback=cbLoadAddressListA&reg=1&encryptversion=1&r=0.8832760737226157&sceneval=2&appCode=ms0ca95114");
+            client.Timeout = -1;
+            var request = new RestRequest(Method.GET);
+            request.AddHeader("authority", "wq.jd.com");
+            request.AddHeader("accept", "*/*");
+            request.AddHeader("accept-language", "zh-CN,zh;q=0.9,en;q=0.8");
+            request.AddHeader("cookie", ck);
+            request.AddHeader("origin", "https://wqs.jd.com");
+            request.AddHeader("referer", "https://wqs.jd.com/");
+            request.AddHeader("sec-fetch-dest", "empty");
+            request.AddHeader("sec-fetch-mode", "cors");
+            request.AddHeader("sec-fetch-site", "same-site");
+            client.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1";
+            IRestResponse response = client.Execute(request);
+            Console.WriteLine(response.Content);
+            var json = response.Content.Replace("cbLoadAddressListA(", "");
+            json = json.Remove(json.Length - 1);
+            var result = JsonConvert.DeserializeObject<AddressObjects>(json);
+            foreach (var address in result.list)
+            {
+                if (address.default_address=="1")
+                {
+                    if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
+                    {
+                        user.AddressName = address.name;
+                    }
+                    else
+                    {
+                        UserList.Add(new UserInfo(phone) { AddressName = address.name });
+                    }
+                } 
+            }
+        }
+
+        public class AddressObjects
+        {
+            public string errCode { get; set; }
+            public string retCode { get; set; }
+            public string msg { get; set; }
+            public string nextUrl { get; set; }
+            public string idc { get; set; }
+            public string token { get; set; }
+            public string dealRecord { get; set; }
+            public string jdaddrid { get; set; }
+            public string jdaddrname { get; set; }
+            public string siteGray { get; set; }
+            public string encryptCode { get; set; }
+            public List[] list { get; set; }
+        }
+
+        public class List
+        {
+            public string label { get; set; }
+            public string type { get; set; }
+            public string rgid { get; set; }
+            public string adid { get; set; }
+            public string addrdetail { get; set; }
+            public string addrfull { get; set; }
+            public string name { get; set; }
+            public string mobile { get; set; }
+            public string phone { get; set; }
+            public string postcode { get; set; }
+            public string email { get; set; }
+            public string idCard { get; set; }
+            public string nameCode { get; set; }
+            public string provinceId { get; set; }
+            public string cityId { get; set; }
+            public string countyId { get; set; }
+            public string townId { get; set; }
+            public string provinceName { get; set; }
+            public string cityName { get; set; }
+            public string countyName { get; set; }
+            public string townName { get; set; }
+            public string areacode { get; set; }
+            public string need_upgrade { get; set; }
+            public string default_address { get; set; }
+            public string longitude { get; set; }
+            public string latitude { get; set; }
+            public string readOnly { get; set; }
         }
 
         private async void SetPhone(string phone)
@@ -186,7 +285,7 @@ namespace JdLoginTool.Wpf
             }
             finally
             {
-                TextBox.Clear();  
+                TextBox.Clear();
             }
         }
         private async Task<bool> ClickLoginButton()
@@ -358,7 +457,7 @@ namespace JdLoginTool.Wpf
             if (IsPhoneNumber(phone))
             {
                 SetPhone(phone);
-               
+
                 ClickGetCaptchaButton();
             }
             else
@@ -418,14 +517,69 @@ namespace JdLoginTool.Wpf
             //todo 为了测试,先应该能够进行html打印
             var html = Browser.GetSourceAsync().Result;
             Trace.WriteLine(html);
-            if (phone_id2_4.ContainsKey(phone))
+            if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
             {
-                var id2_4 = phone_id2_4[phone];
-                TextBox.Text = id2_4;
+                TextBox.Text = user.Phone;
+
                 //todo:sendkey
 
             }
             //todo:获取本次登陆手机号的缓存(或textbox输入内容解析)的身份证信息,然后自动点击验证身份证,自动输入,自动执行
+        }
+        private bool SetId2_4(string id2_4)
+        {
+            try
+            {
+                Browser.EvaluateScriptAsPromiseAsync(
+                    $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{id2_4}\";p.dispatchEvent(new Event('input'));");
+                if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
+                {
+                    user.Id2_4 = id2_4;
+                }
+                else
+                {
+                    UserList.Add(new UserInfo(phone) { Id2_4 = id2_4 });
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                return false;
+            }
+            finally
+            {
+                TextBox.Clear();
+            }
+        }
+        private bool SetAddressName(string addressName)
+        {
+            try
+            {
+                Browser.EvaluateScriptAsPromiseAsync(
+                    $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{addressName}\";p.dispatchEvent(new Event('input'));");
+                if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
+                {
+                    user.AddressName = addressName;
+                }
+                else
+                {
+                    UserList.Add(new UserInfo(phone) { AddressName = addressName });
+                }
+                return true;
+            }
+            catch (Exception e)
+            {
+                return false;
+            }
+            finally
+            {
+                TextBox.Clear();
+            }
+        }
+
+        private void ButtonBrowSource_OnClick(object sender, RoutedEventArgs e)
+        {
+            Browser.ViewSource();
         }
     }
 
