@@ -6,6 +6,7 @@
         public string Id2_4 { get; set; }
         public string NickName { get; set; }
         public string AddressName { get; set; }
+        public MainWindow.AddressList[] AddressList { get; set; }
 
         public UserInfo(string phone)
         {

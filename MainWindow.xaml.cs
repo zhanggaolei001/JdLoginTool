@@ -185,7 +185,7 @@ namespace JdLoginTool.Wpf
             Console.WriteLine(response.Content);
             var json = response.Content.Replace("cbLoadAddressListA(", "");
             json = json.Remove(json.Length - 1);
-            var result = JsonConvert.DeserializeObject<AddressObjects>(json);
+            var result = JsonConvert.DeserializeObject<ResultObject>(json);
             foreach (var address in result.list)
             {
                 if (address.default_address=="1")
@@ -193,16 +193,19 @@ namespace JdLoginTool.Wpf
                     if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
                     {
                         user.AddressName = address.name;
+                        user.AddressList = result.list;
                     }
                     else
                     {
-                        UserList.Add(new UserInfo(phone) { AddressName = address.name });
+                        UserList.Add(new UserInfo(phone) { 
+                            AddressName = address.name ,
+                            AddressList = result.list});
                     }
                 } 
             }
         }
 
-        public class AddressObjects
+        public class ResultObject
         {
             public string errCode { get; set; }
             public string retCode { get; set; }
@@ -215,10 +218,10 @@ namespace JdLoginTool.Wpf
             public string jdaddrname { get; set; }
             public string siteGray { get; set; }
             public string encryptCode { get; set; }
-            public List[] list { get; set; }
+            public AddressList[] list { get; set; }
         }
 
-        public class List
+        public class AddressList
         {
             public string label { get; set; }
             public string type { get; set; }
