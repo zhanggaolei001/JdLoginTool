@@ -192,13 +192,13 @@ namespace JdLoginTool.Wpf
                 {
                     if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
                     {
-                        user.AddressName = address.name;
+                        user.UsualAddressName = address.name;
                         user.AddressList = result.list;
                     }
                     else
                     {
                         UserList.Add(new UserInfo(phone) { 
-                            AddressName = address.name ,
+                            UsualAddressName = address.name ,
                             AddressList = result.list});
                     }
                 } 
@@ -562,11 +562,11 @@ namespace JdLoginTool.Wpf
                     $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{addressName}\";p.dispatchEvent(new Event('input'));");
                 if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
                 {
-                    user.AddressName = addressName;
+                    user.UsualAddressName = addressName;
                 }
                 else
                 {
-                    UserList.Add(new UserInfo(phone) { AddressName = addressName });
+                    UserList.Add(new UserInfo(phone) { UsualAddressName = addressName });
                 }
                 return true;
             }
