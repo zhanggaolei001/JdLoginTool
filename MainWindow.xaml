@@ -7,7 +7,9 @@
         xmlns:behaviors="http://schemas.microsoft.com/xaml/behaviors"
         Title="{Binding Path=Title, ElementName=Browser, Converter={StaticResource TitleConverter}}"
         Width="375"
-        Height="700">
+        Height="700"
+        DataContext="{Binding RelativeSource={RelativeSource Mode=FindAncestor, AncestorLevel=1,AncestorType=Window}}">
+
     <Grid>
         <Grid.Resources>
             <Style TargetType="{x:Type Button}">
@@ -62,34 +64,42 @@
             </wpf:ChromiumWebBrowser>
         </Border>
 
-        <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"   >
-            <TextBox x:Name="TextBox" Width="100"></TextBox> 
+        <WrapPanel Grid.Row="2">
+            <TextBox x:Name="TextBox"
+                     Height="50"
+                     Width="100"></TextBox>
             <Button Content="拿手机号"
-                    Height="50"
+                     
                     ToolTip="复制好手机号后点击这个按钮,自动帮你填写好,并进入绘制图案步骤,然后就会自动发送验证码"
                     Margin="5"
-                    Click="ButtonBase_OnClick"
+                    Click="ButtonSetPhone_OnClick"
                     Width="80" />
             <Button Content="拿验证码"
                     ToolTip="复制好验证码后点击这个按钮,会自动帮你填写好验证码,并执行下一步的登陆等步骤."
-                    Height="50"
+                 
                     Margin="5"
                     Click="ButtonSetCaptcha_OnClick"
                     Width="80" />
             <Button Content="身份证"
                     ToolTip=""
-                    Height="50"
+                 
                     Margin="5"
                     Click="ButtonHandleId_OnClick"
                     Width="80" />
             <Button Content="查看源码"
                     ToolTip=""
-                    Height="50"
+                   
                     Margin="5"
                     Click="ButtonBrowSource_OnClick"
                     Width="80" />
-        </StackPanel>
+            <CheckBox x:Name="CheckBox" VerticalAlignment="Center" IsChecked="True" ToolTip="登陆完成即进入下个登陆页面">集中登陆模式</CheckBox>
+            <Button Content="设置指定账号"
+                    ToolTip=""
+                  
+                    Margin="5"
+                    Click="ButtonSetCK_OnClick"
+                    Width="80" />
+        </WrapPanel>
 
     </Grid>
 </Window>
