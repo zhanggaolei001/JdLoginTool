@@ -6,7 +6,7 @@
         xmlns:behaviours="clr-namespace:JdLoginTool.Wpf.Behaviours"
         xmlns:behaviors="http://schemas.microsoft.com/xaml/behaviors"
         Title="{Binding Path=Title, ElementName=Browser, Converter={StaticResource TitleConverter}}"
-        Width="375"
+        Width="385"
         Height="700"
         DataContext="{Binding RelativeSource={RelativeSource Mode=FindAncestor, AncestorLevel=1,AncestorType=Window}}">
 
@@ -45,11 +45,6 @@
                     <behaviours:TextBoxBindingUpdateOnEnterBehaviour />
                 </behaviors:Interaction.Behaviors>
             </TextBox>
-            <!--<Button Content="重新加载" 
-                    Grid.Column="1"
-                    Command="{Binding ElementName=Browser,Path=ReloadCommand}"
-                    Width="80" />-->
-
         </Grid>
         <Border Grid.Row="1"
                 BorderBrush="Gray"
@@ -64,41 +59,91 @@
             </wpf:ChromiumWebBrowser>
         </Border>
 
-        <WrapPanel Grid.Row="2">
+        <WrapPanel Grid.Row="2"
+                   HorizontalAlignment="Center">
             <TextBox x:Name="TextBox"
-                     Height="50"
-                     Width="100"></TextBox>
-            <Button Content="拿手机号"
-                     
-                    ToolTip="复制好手机号后点击这个按钮,自动帮你填写好,并进入绘制图案步骤,然后就会自动发送验证码"
-                    Margin="5"
-                    Click="ButtonSetPhone_OnClick"
-                    Width="80" />
-            <Button Content="拿验证码"
-                    ToolTip="复制好验证码后点击这个按钮,会自动帮你填写好验证码,并执行下一步的登陆等步骤."
-                 
-                    Margin="5"
-                    Click="ButtonSetCaptcha_OnClick"
-                    Width="80" />
-            <Button Content="身份证"
-                    ToolTip=""
-                 
-                    Margin="5"
-                    Click="ButtonHandleId_OnClick"
-                    Width="80" />
+                     Height="30"
+                     Width="350"
+                     ToolTip="将手机号或验证码填写到这里,点击对应按钮会自动帮你往下执行,实在不会用就当没有这个"></TextBox>
+
+
+            <GroupBox MinWidth="300">
+                <GroupBox.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <Label>模式切换:</Label>
+                        <RadioButton x:Name="Mode1RB"
+                                     VerticalAlignment="Center"
+                                     IsChecked="True"
+                                     ToolTip="登陆完成即进入下个登陆页面">登陆模式</RadioButton>
+                        <RadioButton x:Name="Mode2RB"
+                                     VerticalAlignment="Center"
+                                     ToolTip="手动设定ck,并进行网页访问或便于开发调试其他功能">操作模式</RadioButton>
+                    </StackPanel>
+                </GroupBox.Header>
+                <StackPanel>
+                    <WrapPanel HorizontalAlignment="Center"
+                               IsEnabled="{Binding ElementName=Mode1RB,Path=IsChecked }">
+                        <Button Content="拿手机号"
+                                ToolTip="复制好手机号后点击这个按钮,自动从剪切板或者文本框中拿手机号,帮你填写好,并进入绘制图案验证码步骤,然后就会发送验证码"
+                                Margin="5"
+                                Click="ButtonSetPhone_OnClick"
+                                Width="80" />
+                        <Button Content="拿验证码"
+                                ToolTip="自动从剪切板或者文本框中拿验证码,并帮你填写好验证码,并执行登陆."
+                                Margin="5"
+                                Click="ButtonSetCaptcha_OnClick"
+                                Width="80" />
+                        <Button Content="身份证"
+                                ToolTip="获取缓存的身份证2+4信息,功能不完善,暂不能用"
+                                Margin="5"
+                                Click="ButtonHandleId_OnClick"
+                                Width="80" />
+
+                    </WrapPanel>
+
+
+                    <WrapPanel HorizontalAlignment="Center"
+                               IsEnabled="{Binding ElementName=Mode2RB,Path=IsChecked }">
+                        <Button Content="设置ck"
+                                ToolTip=""
+                                Margin="5"
+                                Click="ButtonSetCK_OnClick"
+                                Width="80" />
+                        <Button Content="获取所有ck"
+                                ToolTip=""
+                                Margin="5"
+                                Click="ButtonReadAllCK_OnClick"
+                                Width="80" />
+                        <Button Content="设置ck并跳转"
+                                ToolTip=""
+                                Margin="5"
+                                Click="ButtonReadNextCk_OnClick"
+                                Width="80" />
+                        <TextBox x:Name="UrlBox"
+                                 Width="180"></TextBox>
+                        <Button Content="Go"
+                                ToolTip=""
+                                Margin="5"
+                                Click="ButtonGoToUrl_OnClick"
+                                Width="80" />
+                    </WrapPanel>
+
+                </StackPanel>
+            </GroupBox>
+
             <Button Content="查看源码"
                     ToolTip=""
-                   
                     Margin="5"
                     Click="ButtonBrowSource_OnClick"
                     Width="80" />
-            <CheckBox x:Name="CheckBox" VerticalAlignment="Center" IsChecked="True" ToolTip="登陆完成即进入下个登陆页面">集中登陆模式</CheckBox>
-            <Button Content="设置指定账号"
+            <Button Content="DevTools"
                     ToolTip=""
-                  
                     Margin="5"
-                    Click="ButtonSetCK_OnClick"
-                    Width="80" />
+                    Click="ButtonDevTools_OnClick"
+                    Width="120" />
+            <CheckBox x:Name="MessageOn"
+                      IsChecked="True"
+                      VerticalAlignment="Center" ToolTip="新手建议别勾选,提示信息有助于你排查问题">安静</CheckBox>
         </WrapPanel>
 
     </Grid>

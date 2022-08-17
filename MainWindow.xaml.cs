@@ -23,6 +23,7 @@ namespace JdLoginTool.Wpf
 {
     public class MenuHandler : IContextMenuHandler
     {
+
         public void OnBeforeContextMenu(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model)
         {
             model.Clear();
@@ -41,7 +42,9 @@ namespace JdLoginTool.Wpf
     }
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-       public static string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "cache.json");
+
+        public static string CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "cache.json");
+        public static string CookiePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "config.sh");
         public List<UserInfo> UserList { get; set; } = new List<UserInfo>();
         public MainWindow()
         {
@@ -51,12 +54,15 @@ namespace JdLoginTool.Wpf
                "15103793217": "*3545",
                "18317520679": "*0522"
                */
-
-            if (!File.Exists(path))
+            string j = "[]";
+            if (!File.Exists(CachePath))
             {
-                File.Create(path);
+                File.Create(CachePath, 1024 * 10, FileOptions.RandomAccess);
             }
-            var j = File.ReadAllText(path);
+            else
+            {
+                j = File.ReadAllText(CachePath);
+            }
             if (!string.IsNullOrWhiteSpace(j))
             {
                 var tmp = JsonConvert.DeserializeObject<List<UserInfo>>(j);
@@ -79,8 +85,10 @@ namespace JdLoginTool.Wpf
             {
                 var json = JsonConvert.SerializeObject(UserList, Formatting.Indented);
                 Console.WriteLine(json);
-                File.WriteAllText( path, json);
+                File.WriteAllText(CachePath, json);
             };
+            this.UrlBox.Text =
+                "m.jd.com";
         }
 
 
@@ -124,7 +132,7 @@ namespace JdLoginTool.Wpf
         public String PhoneNumber { get; set; }
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (this.CheckBox.IsChecked != true)
+            if (this.Mode1RB.IsChecked != true)
             {
                 return;
             }
@@ -162,7 +170,15 @@ namespace JdLoginTool.Wpf
                    {
                        Console.WriteLine(exception);
                        File.AppendAllText("cookies.txt", DateTime.Now.ToString() + ":" + ck);
-                       MessageBox.Show(this, "复制到剪切板失败,(远程桌面下会出这个问题或重启电脑可能就好了),已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
+                       if (MessageOn.IsChecked == true)
+                       {
+
+                       }
+                       else
+                       {
+                           MessageBox.Show(this, "复制到剪切板失败,(远程桌面下会出这个问题或重启电脑可能就好了),已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
+
+                       }
                    }
 
 
@@ -198,6 +214,7 @@ namespace JdLoginTool.Wpf
             var json = response.Content.Replace("cbLoadAddressListA(", "");
             json = json.Remove(json.Length - 1);
             var result = JsonConvert.DeserializeObject<ResultObject>(json);
+
             foreach (var address in result.list)
             {
                 if (address.default_address == "1")
@@ -309,7 +326,7 @@ namespace JdLoginTool.Wpf
         {
             try
             {
-                await Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                //  await Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
                 Thread.Sleep(500);
                 var result = await Browser.EvaluateScriptAsync(" var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
 
@@ -335,7 +352,16 @@ namespace JdLoginTool.Wpf
                 }
                 if (string.IsNullOrWhiteSpace(qlToken))
                 {
-                    MessageBox.Show(this, "登陆青龙失败:获取Token失败");
+                    if (MessageOn.IsChecked == true)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, "登陆青龙失败:获取Token失败");
+
+                    }
+
                     return;
                 }
                 var jck = JDCookie.parse(ck);
@@ -365,11 +391,28 @@ namespace JdLoginTool.Wpf
                 request.AddParameter("application/json", body, ParameterType.RequestBody);
                 var response = client.Execute(request);
                 Console.WriteLine(response.Content);
-                MessageBox.Show(this, response.Content, "上传青龙成功(Cookie已复制到剪切板)");
+                if (MessageOn.IsChecked == true)
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show(this, response.Content, "上传青龙成功(Cookie已复制到剪切板)");
+
+
+                }
             }
             catch (Exception e)
             {
-                MessageBox.Show(this, e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
+                if (MessageOn.IsChecked == true)
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show(this, e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
+
+                }
             }
         }
         private bool CheckIsNewUser(string qlUrl, string ck, out int id)
@@ -443,11 +486,28 @@ namespace JdLoginTool.Wpf
                     var request = new RestRequest(method == "post" ? Method.POST : Method.GET);
                     var response = client.Execute(request);
                     Console.WriteLine(response.Content);
-                    MessageBox.Show(this, ck, "Cookie已上传服务器");
+                    if (MessageOn.IsChecked == true)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, ck, "Cookie已上传服务器");
+
+                    }
+
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show(this, e.Message);
+                    if (MessageOn.IsChecked == true)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, e.Message);
+                    }
+
                 }
             }
         }
@@ -474,7 +534,15 @@ namespace JdLoginTool.Wpf
             if (IsPhoneNumber(phone))
             {
                 SetPhone(phone);
-
+                try
+                {
+                    Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                    Thread.Sleep(500);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine(exception);
+                }
                 ClickGetCaptchaButton();
             }
             else
@@ -529,30 +597,49 @@ namespace JdLoginTool.Wpf
             JumpToLoginPage();
         }
 
-        private void ButtonHandleId_OnClick(object sender, RoutedEventArgs e)
+        private async void ButtonHandleId_OnClick(object sender, RoutedEventArgs e)
         {
             //todo 为了测试,先应该能够进行html打印
             //var html = Browser.GetSourceAsync().Result;
             // Trace.WriteLine(html);
-            if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
+            if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
             {
                 try
                 {
+                    var id_2d_clip = Clipboard.GetText();
+                    if (string.IsNullOrEmpty(user.Id2_4) && (!string.IsNullOrEmpty(TextBox.Text) || !string.IsNullOrEmpty(id_2d_clip)))
+                    {
+                        user.Id2_4 = string.IsNullOrEmpty(TextBox.Text) ? id_2d_clip : TextBox.Text;
+                    }
                     if (string.IsNullOrEmpty(user.Id2_4))
                     {
                         return;
                     }
-                    TextBox.Text = user.Id2_4;
-                    //todo
-                    for (var i = 0; i < TextBox.Text.Length; i++)
+                    if (user.Id2_4.Length == 6)
                     {
-                        var js = $"document.querySelector(\"#app > div > div.wrap > div.input-box > div > div:nth-child({1 + i})\").innerText = {TextBox.Text[i]}";
-                        Browser.EvaluateScriptAsPromiseAsync(js);
+                        user.Id2_4 = user.Id2_4.Insert(2, " ");
+                    }
+                    for (var i = 0; i < user.Id2_4.Length; i++)
+                    {
+                        var js = $"document.querySelector(\"#app > div > div.wrap > div.input-box > div > div:nth-child({1 + i})\").innerText = {user.Id2_4[i]}";
+                        var r = await Browser.EvaluateScriptAsPromiseAsync(js);
+                        Console.WriteLine($"{r.Message}");
+                        if (i == 1)
+                        {
+                            i++;
+                        }
                     }
                 }
                 catch (Exception exception)
-                { 
-                    MessageBox.Show(exception.Message);
+                {
+                    if (MessageOn.IsChecked == true)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox.Show(exception.Message);
+                    } 
                 }
 
 
@@ -677,6 +764,73 @@ namespace JdLoginTool.Wpf
         private bool IsCk(string ck)
         {
             return ck.Contains("pt_key") && ck.Contains("pt_pin") && ck.Length > 20;
+        }
+        public List<string> Cookies = new List<string>();
+        private void ButtonReadAllCK_OnClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (File.Exists(CookiePath))
+                {
+                    File.Create(CookiePath);
+                }
+                Cookies = File.ReadAllLines(CookiePath).ToList();
+            }
+            catch (Exception exception)
+            {
+                if (MessageOn.IsChecked == true)
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show(exception.Message);
+                }
+            }
+        }
+
+        public int CkIndex { get; set; } = 0;
+        private void ButtonReadNextCk_OnClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                this.TextBox.Text = Cookies[CkIndex++];
+                var ck = this.TextBox.Text;
+
+                if (IsCk(ck))
+                {
+                    SetCk(ck);
+                    Browser.Address = this.UrlBox.Text;
+                    // GoToCart();
+                }
+                else
+                {
+                    SetPhone("");
+                }
+            }
+            catch (Exception exception)
+            {
+                if (MessageOn.IsChecked == true)
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show(exception.Message);
+                }
+            }
+        }
+
+        private void ButtonGoToUrl_OnClick(object sender, RoutedEventArgs e)
+        {
+            Browser.Address = this.UrlBox.Text;
+        }
+
+        private void ButtonDevTools_OnClick(object sender, RoutedEventArgs e)
+        {
+
+            Browser.ShowDevTools();
+
         }
     }
 
