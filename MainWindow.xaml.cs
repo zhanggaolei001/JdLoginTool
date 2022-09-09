@@ -150,12 +150,18 @@ namespace JdLoginTool.Wpf
                    Regex reg = new Regex(@"[\u4e00-\u9fa5]");
                    if (reg.IsMatch(cookie.Value))
                    {
-                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
+                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin")
+                       {
+                           ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
+                       }
 
                    }
                    else
                    {
-                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin") ck = ck + $"{cookie.Name}={cookie.Value};";
+                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin")
+                       {
+                           ck = ck + $"{cookie.Name}={cookie.Value};";
+                       }
                    }
 
                }
