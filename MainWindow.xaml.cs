@@ -1,59 +1,86 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using CefSharp;
-using HtmlAgilityPack;
 using JdLoginTool.Wpf.Model;
+using JdLoginTool.Wpf.Model.Qinglong;
+using JdLoginTool.Wpf.Service;
+using JdLoginTool.Wpf.Utility;
 using Newtonsoft.Json;
 using RestSharp;
+using Cookie = CefSharp.Cookie;
 
 namespace JdLoginTool.Wpf
 {
-    public class MenuHandler : IContextMenuHandler
+    public class JsObj
     {
+        public static MainWindow Main { get; set; }
 
-        public void OnBeforeContextMenu(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model)
+        public void SetJsBox(string s)
         {
-            model.Clear();
+            Main.SetJsBox(s);
         }
-        public bool OnContextMenuCommand(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, CefMenuCommand commandId, CefEventFlags eventFlags)
+        public bool Test()
         {
-            return false;
-        }
-        public void OnContextMenuDismissed(IWebBrowser browserControl, IBrowser browser, IFrame frame)
-        {
-        }
-        public bool RunContextMenu(IWebBrowser browserControl, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model, IRunContextMenuCallback callback)
-        {
-            return false;
+            return true;
         }
     }
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        private Visibility _IsSimpleMode = Visibility.Collapsed;
 
-        public static string CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "cache.json");
-        public static string CookiePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "config.sh");
-        public List<UserInfo> UserList { get; set; } = new List<UserInfo>();
+        public Visibility IsSimpleMode
+        {
+            get { return _IsSimpleMode; }
+            set
+            {
+                _IsSimpleMode = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public static string CachePath =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "cache.json");
+
+        public static string CookiePath =
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "config.sh");
+
+        public ObservableCollection<User> UserList
+        {
+            get => _userList;
+            set
+            {
+                _userList = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public void SetJsBox(string s)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+                {
+                    this.JsBox.Text = s;
+                })
+                ;
+        }
         public MainWindow()
         {
-            /* "13250812637": "*3565",
-               "17682487263": "*1515",
-               "15236225781": "*2028",
-               "15103793217": "*3545",
-               "18317520679": "*0522"
-               */
+            InitializeComponent();
+            DateTimePicker.Value = DateTime.Now;
+            this.DataContext = this;
             string j = "[]";
             if (!File.Exists(CachePath))
             {
@@ -63,21 +90,46 @@ namespace JdLoginTool.Wpf
             {
                 j = File.ReadAllText(CachePath);
             }
+
+            if (File.Exists("ua.txt"))
+            {
+                this._defaultUa = File.ReadAllText("ua.txt");
+            }
+            if (File.Exists("url.txt"))
+            {
+                UrlBox.Text = File.ReadAllText("url.txt");
+            }
+            if (File.Exists("js.txt"))
+            {
+                JsBox.Text = File.ReadAllText("js.txt");
+            }
+
             if (!string.IsNullOrWhiteSpace(j))
             {
-                var tmp = JsonConvert.DeserializeObject<List<UserInfo>>(j);
-                if (tmp.Any())
+                try
                 {
-                    UserList = tmp;
+                    var tmp = JsonConvert.DeserializeObject<List<User>>(j);
+                    if (tmp.Any())
+                    {
+                        foreach (var userInfo in tmp)
+                        {
+                            UserList.Add(userInfo);
+                        }
+                    }
                 }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                }
+
             }
-            InitializeComponent();
+            CefSharpSettings.WcfEnabled = false;
+            Browser.JavascriptObjectRepository.Settings.LegacyBindingEnabled = true; JsObj.Main = this;
+            Browser.JavascriptObjectRepository.Register("gui", new JsObj(), true);//这个地方相当于注册了一个BO（浏览器对象，和window对象是平级的）
+
             Browser.TitleChanged += Browser_TitleChanged;
             Browser.KeyUp += TryGetUserInputPhone;
-            this.Loaded += (o, e) =>
-            {
-                Browser.Address = "m.jd.com";
-            };
+            this.Loaded += (o, e) => { Browser.Address = "m.jd.com"; };
             Browser.MenuHandler = new MenuHandler();
             Browser.FrameLoadEnd += Browser_FrameLoadEnd;
 
@@ -86,9 +138,18 @@ namespace JdLoginTool.Wpf
                 var json = JsonConvert.SerializeObject(UserList, Formatting.Indented);
                 Console.WriteLine(json);
                 File.WriteAllText(CachePath, json);
+                this.stop = true;
+                this.exit = true;
+
             };
-            this.UrlBox.Text =
-                "m.jd.com";
+            if (string.IsNullOrWhiteSpace(UrlBox.Text))
+            {
+                this.UrlBox.Text =
+             "https://coupon.m.jd.com/coupons/show.action?key=c0m2c5s1o3a04f8c8c925cac41c942bb&roleId=88645899&time=1668045928261#183_871058406";
+
+            }
+
+
         }
 
 
@@ -106,11 +167,11 @@ namespace JdLoginTool.Wpf
                             "get_phone();";
             await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
             {
-                var resp = respA.Result;    //respObj此时有两个属性: name、age
-                dynamic respObj = resp.Result;
-                PhoneNumber = (string)resp.Result;
+                var resp = respA.Result; //respObj此时有两个属性: name、age
+                Phone = (string)resp.Result;
             }));
         }
+
         private async void JumpToLoginPage()
         {
             var title = "";
@@ -121,175 +182,113 @@ namespace JdLoginTool.Wpf
                 string script = "document.querySelector('#msShortcutLogin').click()";
                 await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
                 {
-                    var resp = respA.Result;    //respObj此时有两个属性: name、age
-                    dynamic respObj = resp.Result;
+                    var resp = respA.Result; //respObj此时有两个属性: name、age
                     Trace.WriteLine((string)resp.Result);
                 }));
             }
 
         }
 
-        public String PhoneNumber { get; set; }
+
+
+        ICookieManager CookieManager;
+
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            if (this.Mode1RB.IsChecked != true)
+            if (CookieManager == null)
             {
-                return;
+                CookieManager = Browser.WebBrowser.GetCookieManager();
             }
-            string ck = "";
+
+            if (this.LoginMode.IsChecked != true) return;
+            if (!GetBrowserCk()) return;
+            ClearBrowserCk();
+            JumpToLoginPage();
+        }
+
+        private bool GetBrowserCk()
+        {
+            bool result = false;
             this.Browser.Dispatcher.Invoke(new Action(() =>
-           {
-
-               ICookieManager cm = Browser.WebBrowser.GetCookieManager();
-               var visitor = new TaskCookieVisitor();
-               cm.VisitAllCookies(visitor);
-               var cks = visitor.Task.Result;
-
-               foreach (var cookie in cks)
-               {
-                   Regex reg = new Regex(@"[\u4e00-\u9fa5]");
-                   if (reg.IsMatch(cookie.Value))
-                   {
-                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin")
-                       {
-                           ck = ck + $"{cookie.Name}={System.Web.HttpUtility.UrlEncode(cookie.Value)};";
-                       }
-
-                   }
-                   else
-                   {
-                       if (cookie.Name == "pt_key" || cookie.Name == "pt_pin")
-                       {
-                           ck = ck + $"{cookie.Name}={cookie.Value};";
-                       }
-                   }
-
-               }
-
-               if (ck.Contains("pt_key") && ck.Contains("pt_pin"))
-               {
-                   try
-                   {
-                       Clipboard.SetText(ck);
-                   }
-                   catch (Exception exception)
-                   {
-                       Console.WriteLine(exception);
-                       File.AppendAllText("cookies.txt", DateTime.Now.ToString() + ":" + ck);
-                       if (MessageOn.IsChecked == true)
-                       {
-
-                       }
-                       else
-                       {
-                           MessageBox.Show(this, "复制到剪切板失败,(远程桌面下会出这个问题或重启电脑可能就好了),已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
-
-                       }
-                   }
-
-
-                   UploadToServer(ck);
-                   UploadToQingLong(ck);
-                   GetAndSaveUserInfo(ck);
-                   cm.DeleteCookies(".jd.com", "pt_key");
-                   cm.DeleteCookies(".jd.com", "pt_pin");
-                   Browser.Address = "m.jd.com";
-               }
-
-           }));
-
-        }
-
-        private void GetAndSaveUserInfo(string ck)
-        {
-            var client = new RestClient("https://wq.jd.com/deal/recvaddr/getrecvaddrlistV3?adid=&locationid=undefined&callback=cbLoadAddressListA&reg=1&encryptversion=1&r=0.8832760737226157&sceneval=2&appCode=ms0ca95114");
-            client.Timeout = -1;
-            var request = new RestRequest(Method.GET);
-            request.AddHeader("authority", "wq.jd.com");
-            request.AddHeader("accept", "*/*");
-            request.AddHeader("accept-language", "zh-CN,zh;q=0.9,en;q=0.8");
-            request.AddHeader("cookie", ck);
-            request.AddHeader("origin", "https://wqs.jd.com");
-            request.AddHeader("referer", "https://wqs.jd.com/");
-            request.AddHeader("sec-fetch-dest", "empty");
-            request.AddHeader("sec-fetch-mode", "cors");
-            request.AddHeader("sec-fetch-site", "same-site");
-            client.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1";
-            IRestResponse response = client.Execute(request);
-            Console.WriteLine(response.Content);
-            var json = response.Content.Replace("cbLoadAddressListA(", "");
-            json = json.Remove(json.Length - 1);
-            var result = JsonConvert.DeserializeObject<ResultObject>(json);
-
-            foreach (var address in result.list)
             {
-                if (address.default_address == "1")
+                var ckList = GetJingdongCk();
+                var ckString = ckList.ToCkString();
+                if (ckString.Contains("pt_key") && ckString.Contains("pt_pin"))
                 {
-                    if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
+                    try
                     {
-                        user.UsualAddressName = address.name;
-                        user.AddressList = result.list;
+                        Clipboard.SetText(ckString);
                     }
-                    else
+                    catch (Exception exception)
                     {
-                        UserList.Add(new UserInfo(phone)
+                        Console.WriteLine(exception);
+                        File.AppendAllText("cookies.log", DateTime.Now.ToString() + ":" + ckString);
+                        if (MessageOn.IsChecked != true)
                         {
-                            UsualAddressName = address.name,
-                            AddressList = result.list
-                        });
+                            MessageBox.Show(this,
+                                "复制到剪切板失败,(远程桌面下会出这个问题或重启电脑可能就好了),已经ck写入cookies.txt中,开始尝试上传.错误信息" + exception.Message);
+                        }
                     }
+
+                    UploadToServer(ckString);
+                    var ptPin = QingLongJdCookie.Parse(ckString).ptPin;
+                    var user = FindOrAddUser(ptPin);
+                    user.Cookies = ckList.ToArray();
+
+                    if (!string.IsNullOrWhiteSpace(Phone) && Helper.IsPhoneNumber(Phone))
+                    {
+                        user.Phone = Phone;
+                    }
+
+                    QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
+
+                    result = true;
                 }
+                else
+                {
+                    result = false;
+                }
+            }));
+            return result;
+        }
+
+        private void ClearBrowserCk()
+        {
+            CookieManager.DeleteCookies(".jd.com", "pt_key");
+            CookieManager.DeleteCookies(".jd.com", "pt_pin");
+            Browser.Address = "m.jd.com";
+            Phone = "";
+        }
+
+        private List<Cookie> GetJingdongCk()
+        {
+            var visitor = new TaskCookieVisitor();
+            CookieManager.VisitAllCookies(visitor);
+            var cks = visitor.Task.Result;
+            return cks.Where(cookie => cookie.Name == "pt_key" || cookie.Name == "pt_pin" || cookie.Name == "exp")
+                .ToList();
+        }
+
+
+
+
+        private User FindOrAddUser(string ptPin)
+        {
+            var now = DateTime.Now;
+            //todo:检测中英文问题.
+            var user = UserList.FirstOrDefault(u => u.Pin == ptPin
+                                                    || System.Web.HttpUtility.UrlEncode(u.Pin) == ptPin
+                                                    || u.Pin == System.Web.HttpUtility.UrlEncode(ptPin));
+            if (user == null)
+            {
+                user = new User(Phone, now.AddDays(29));
+                UserList.Add(user);
             }
+
+            return user;
         }
 
-        public class ResultObject
-        {
-            public string errCode { get; set; }
-            public string retCode { get; set; }
-            public string msg { get; set; }
-            public string nextUrl { get; set; }
-            public string idc { get; set; }
-            public string token { get; set; }
-            public string dealRecord { get; set; }
-            public string jdaddrid { get; set; }
-            public string jdaddrname { get; set; }
-            public string siteGray { get; set; }
-            public string encryptCode { get; set; }
-            public AddressList[] list { get; set; }
-        }
-
-        public class AddressList
-        {
-            public string label { get; set; }
-            public string type { get; set; }
-            public string rgid { get; set; }
-            public string adid { get; set; }
-            public string addrdetail { get; set; }
-            public string addrfull { get; set; }
-            public string name { get; set; }
-            public string mobile { get; set; }
-            public string phone { get; set; }
-            public string postcode { get; set; }
-            public string email { get; set; }
-            public string idCard { get; set; }
-            public string nameCode { get; set; }
-            public string provinceId { get; set; }
-            public string cityId { get; set; }
-            public string countyId { get; set; }
-            public string townId { get; set; }
-            public string provinceName { get; set; }
-            public string cityName { get; set; }
-            public string countyName { get; set; }
-            public string townName { get; set; }
-            public string areacode { get; set; }
-            public string need_upgrade { get; set; }
-            public string default_address { get; set; }
-            public string longitude { get; set; }
-            public string latitude { get; set; }
-            public string readOnly { get; set; }
-        }
-
-        private async void SetPhone(string phone)
+        private async void WritePhone(string phone)
         {
             try
             {
@@ -303,7 +302,7 @@ namespace JdLoginTool.Wpf
             }
             catch (Exception e)
             {
-
+                LogLabel.Content = e.Message;
             }
             finally
             {
@@ -311,7 +310,8 @@ namespace JdLoginTool.Wpf
             }
 
         }
-        private bool SetCaptcha(string captcha)
+
+        private bool WriteCaptcha(string captcha)
         {
             try
             {
@@ -321,6 +321,7 @@ namespace JdLoginTool.Wpf
             }
             catch (Exception e)
             {
+                LogLabel.Content = e.Message;
                 return false;
             }
             finally
@@ -328,151 +329,21 @@ namespace JdLoginTool.Wpf
                 TextBox.Clear();
             }
         }
+
         private async Task<bool> ClickLoginButton()
         {
             try
             {
-                //  await Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
                 Thread.Sleep(500);
-                var result = await Browser.EvaluateScriptAsync(" var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
+                var result = await Browser.EvaluateScriptAsync(
+                    " var xresult = document.evaluate(`//*[@id=\"app\"]/div/a[1]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.click();");
 
                 return result.Success;
             }
             catch (Exception e)
             {
-
+                LogLabel.Content = e.Message;
                 return false;
-            }
-        }
-
-        private string qlToken = "";
-        private void UploadToQingLong(string ck)
-        {
-            var qlUrl = ConfigurationManager.AppSettings["qlUrl"];
-            if (string.IsNullOrWhiteSpace(qlUrl)) return;
-            try
-            {
-                if (string.IsNullOrWhiteSpace(qlToken))
-                {
-                    GetQingLongToken();
-                }
-                if (string.IsNullOrWhiteSpace(qlToken))
-                {
-                    if (MessageOn.IsChecked == true)
-                    {
-
-                    }
-                    else
-                    {
-                        MessageBox.Show(this, "登陆青龙失败:获取Token失败");
-
-                    }
-
-                    return;
-                }
-                var jck = JDCookie.parse(ck);
-                var input = new InputWindow();
-                string remarks = PhoneNumber ?? jck.ptPin;//正常应该就是手机号了,如果开发的有问题,拿错手机号会用ptPin
-                input.Remarkers = remarks;
-                if (input.ShowDialog() == true)
-                {
-                    remarks = input.Remarkers;
-                }
-                var client = new RestClient($"{qlUrl}/open/envs") { Timeout = -1 };
-                var request = new RestRequest();
-                request.AddHeader("Authorization", $"Bearer {qlToken}");
-                request.AddHeader("Content-Type", "application/json");
-                request.AddParameter("t", DateTimeOffset.Now.ToUnixTimeMilliseconds());
-                var body = $"[{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\"}}]";
-                if (CheckIsNewUser(qlUrl, ck, out var id))
-                {
-                    request.Method = Method.POST;
-                }
-                else
-                {
-                    body = $"{{\"name\":\"JD_COOKIE\",\"value\":\"{ck}\",\"remarks\":\"{remarks}\",\"id\":{id}}}";
-                    request.Method = Method.PUT;
-                }
-
-                request.AddParameter("application/json", body, ParameterType.RequestBody);
-                var response = client.Execute(request);
-                Console.WriteLine(response.Content);
-                if (MessageOn.IsChecked == true)
-                {
-
-                }
-                else
-                {
-                    MessageBox.Show(this, response.Content, "上传青龙成功(Cookie已复制到剪切板)");
-
-
-                }
-            }
-            catch (Exception e)
-            {
-                if (MessageOn.IsChecked == true)
-                {
-
-                }
-                else
-                {
-                    MessageBox.Show(this, e.Message, "上传青龙失败,Cookie已复制到剪切板,请自行添加处理");
-
-                }
-            }
-        }
-        private bool CheckIsNewUser(string qlUrl, string ck, out int id)
-        {
-            var newCk = JDCookie.parse(ck);
-            var client = new RestClient($"{qlUrl}/open/envs");
-            client.Timeout = -1;
-            var request = new RestRequest(Method.GET);
-            request.AddHeader("Authorization", $"Bearer {qlToken}");
-            request.AddHeader("Content-Type", "application/json");
-            var response = client.Execute(request);
-            var result = JsonConvert.DeserializeObject<GetCookiesResult>(response.Content);
-            if (result == null)
-            {
-                id = 0;
-                return true;
-            }
-            if (result.code != 200)
-            {
-                throw new Exception($"请求返回失败,代码:{result.code}");
-            }
-            if (result.data.Any(jck => JDCookie.parse(jck.value).ptPin == newCk.ptPin))
-            {
-                var firstOrDefault = result.data.FirstOrDefault(jck => newCk.ptPin != null && JDCookie.parse(jck.value).ptPin == newCk.ptPin);
-                if (firstOrDefault != null)
-                {
-                    id = firstOrDefault.id;
-                }
-                else
-                {
-                    id = 0;
-                    return true;
-                }
-
-                return false;
-            }
-            id = 0;
-            return true;
-        }
-
-        private void GetQingLongToken()
-        {
-            var qlUrl = ConfigurationManager.AppSettings["qlUrl"];
-            var qlClientID = ConfigurationManager.AppSettings["qlClientID"];
-            var qlClientSecret = ConfigurationManager.AppSettings["qlClientSecret"];
-            var client = new RestClient($"{qlUrl}/open/auth/token?client_id={qlClientID}&client_secret={qlClientSecret}");
-            client.Timeout = -1;
-            var request = new RestRequest(Method.GET);
-            IRestResponse response = client.Execute(request);
-            if (response.StatusCode == HttpStatusCode.OK)
-            {
-                var result = JsonConvert.DeserializeObject<QLTokenResult>(response.Content);
-                qlToken = result.data.token;
-                //todo:保存 qlToken,下次运行先拿,并判断是否过期,过期删除,重新获取,后面再实现,目前应用场景影响不大.
             }
         }
 
@@ -487,7 +358,7 @@ namespace JdLoginTool.Wpf
                 {
                     var client = new RestClient(ckServer + ck)
                     {
-                        Timeout = -1
+                        Timeout = 1000
                     };
                     var request = new RestRequest(method == "post" ? Method.POST : Method.GET);
                     var response = client.Execute(request);
@@ -501,19 +372,10 @@ namespace JdLoginTool.Wpf
                         MessageBox.Show(this, ck, "Cookie已上传服务器");
 
                     }
-
                 }
                 catch (Exception e)
                 {
-                    if (MessageOn.IsChecked == true)
-                    {
-
-                    }
-                    else
-                    {
-                        MessageBox.Show(this, e.Message);
-                    }
-
+                    MessageBox.Show(this, e.Message);
                 }
             }
         }
@@ -528,48 +390,42 @@ namespace JdLoginTool.Wpf
             e.Handled = true;
         }
 
-        private static string phone = "";
+        public static string Phone = "";
+
+
         private void ButtonSetPhone_OnClick(object sender, RoutedEventArgs e)
         {
-
-            phone = Clipboard.GetText();
-            if (!IsPhoneNumber(phone))
+            Phone = Clipboard.GetText(); 
+            Clipboard.Clear();
+            if (!Helper.IsPhoneNumber(Phone))
             {
-                phone = TextBox.Text;
+                Phone = TextBox.Text;
             }
-            if (IsPhoneNumber(phone))
+          
+            if (Helper.IsPhoneNumber(Phone))
             {
-                SetPhone(phone);
+                WritePhone(Phone);
                 try
                 {
-                    Browser.EvaluateScriptAsync(" var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
+                    Browser.EvaluateScriptAsync(
+                        " var xresult = document.querySelector(\"#app > div > p.policy_tip > input\").click();");
                     Thread.Sleep(500);
                 }
                 catch (Exception exception)
                 {
                     Console.WriteLine(exception);
                 }
+
                 ClickGetCaptchaButton();
             }
             else
             {
-                SetPhone("");
+                WritePhone("");
             }
 
         }
 
-        //string GetId2_4(string phone)
-        //{
-        //    //todo:读取本地映射列表
-        //};
-        public static bool IsPhoneNumber(string phoneNumber)
-        {
-            return Regex.IsMatch(phoneNumber, @"^1(3[0-9]|5[0-9]|7[6-8]|8[0-9])[0-9]{8}$");
-        }
-        public static bool IsCaptcha(string captcha)
-        {
-            return Regex.IsMatch(captcha, @"^\d{6}$");
-        }
+
         private bool ClickGetCaptchaButton()
         {
             try
@@ -580,54 +436,53 @@ namespace JdLoginTool.Wpf
             }
             catch (Exception e)
             {
-
+                LogLabel.Content = e.Message;
                 return false;
             }
         }
+
         private async void ButtonSetCaptcha_OnClick(object sender, RoutedEventArgs e)
         {
-            var captcha = Clipboard.GetText();
-            if (!IsCaptcha(captcha))
+            var captcha = Clipboard.GetText(); Clipboard.Clear();
+            if (!Helper.IsCaptcha(captcha))
             {
                 captcha = TextBox.Text;
             }
-            if (IsCaptcha(captcha))
+
+            if (Helper.IsCaptcha(captcha))
             {
-                SetCaptcha(captcha);
+                WriteCaptcha(captcha);
                 await ClickLoginButton();
             }
         }
 
-        private void ButtonLogin_OnClick(object sender, RoutedEventArgs e)
-        {
-            JumpToLoginPage();
-        }
-
         private async void ButtonHandleId_OnClick(object sender, RoutedEventArgs e)
         {
-            //todo 为了测试,先应该能够进行html打印
-            //var html = Browser.GetSourceAsync().Result;
-            // Trace.WriteLine(html);
-            if (UserList.FirstOrDefault(u => u.Phone == phone) is { } user)
+            if (UserList.FirstOrDefault(u => u.Phone == Phone) is { } user)
             {
                 try
                 {
                     var id_2d_clip = Clipboard.GetText();
-                    if (string.IsNullOrEmpty(user.Id2_4) && (!string.IsNullOrEmpty(TextBox.Text) || !string.IsNullOrEmpty(id_2d_clip)))
+                    if (string.IsNullOrEmpty(user.Id2_4) &&
+                        (!string.IsNullOrEmpty(TextBox.Text) || !string.IsNullOrEmpty(id_2d_clip)))
                     {
                         user.Id2_4 = string.IsNullOrEmpty(TextBox.Text) ? id_2d_clip : TextBox.Text;
                     }
+
                     if (string.IsNullOrEmpty(user.Id2_4))
                     {
                         return;
                     }
+
                     if (user.Id2_4.Length == 6)
                     {
                         user.Id2_4 = user.Id2_4.Insert(2, " ");
                     }
+
                     for (var i = 0; i < user.Id2_4.Length; i++)
                     {
-                        var js = $"document.querySelector(\"#app > div > div.wrap > div.input-box > div > div:nth-child({1 + i})\").innerText = {user.Id2_4[i]}";
+                        var js =
+                            $"document.querySelector(\"#app > div > div.wrap > div.input-box > div > div:nth-child({1 + i})\").innerText = {user.Id2_4[i]}";
                         var r = await Browser.EvaluateScriptAsPromiseAsync(js);
                         Console.WriteLine($"{r.Message}");
                         if (i == 1)
@@ -645,61 +500,35 @@ namespace JdLoginTool.Wpf
                     else
                     {
                         MessageBox.Show(exception.Message);
-                    } 
+                    }
                 }
 
-
-                //document.querySelector("#app > div > div.wrap > div.input-box > div > div:nth-child(1)").innerText=1
-                //document.querySelector("#app > div > div.wrap > div.input-box > div > div:nth-child(1)").innerText=1
-                //document.querySelector("#app > div > div.wrap > div.input-box > div > div:nth-child(1)").innerText=1
-                //document.querySelector("#app > div > div.wrap > div.input-box > div > div:nth-child(1)").innerText=1
                 //todo:sendkey
             }
+
             //todo:获取本次登陆手机号的缓存(或textbox输入内容解析)的身份证信息,然后自动点击验证身份证,自动输入,自动执行
         }
-        private bool SetUserId2_4(string id2_4)
+
+        private bool WriteUserId2_4(string id2_4)
         {
             try
             {
                 Browser.EvaluateScriptAsPromiseAsync(
                     $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{id2_4}\";p.dispatchEvent(new Event('input'));");
-                if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
+                if (UserList.FirstOrDefault(u => u.Phone == Phone) is User user)
                 {
                     user.Id2_4 = id2_4;
                 }
                 else
                 {
-                    UserList.Add(new UserInfo(phone) { Id2_4 = id2_4 });
+                    // UserList.Add(new User(phone, DateTime.Now,ck) { Id2_4 = id2_4 });
                 }
+
                 return true;
             }
             catch (Exception e)
             {
-                return false;
-            }
-            finally
-            {
-                TextBox.Clear();
-            }
-        }
-        private bool SetAddressName(string addressName)
-        {
-            try
-            {
-                Browser.EvaluateScriptAsPromiseAsync(
-                    $"var xresult = document.evaluate(`//*[@id=\"authcode\"]`, document, null, XPathResult.ANY_TYPE, null);var p=xresult.iterateNext();p.value=\"{addressName}\";p.dispatchEvent(new Event('input'));");
-                if (UserList.FirstOrDefault(u => u.Phone == phone) is UserInfo user)
-                {
-                    user.UsualAddressName = addressName;
-                }
-                else
-                {
-                    UserList.Add(new UserInfo(phone) { UsualAddressName = addressName });
-                }
-                return true;
-            }
-            catch (Exception e)
-            {
+                LogLabel.Content = e.Message;
                 return false;
             }
             finally
@@ -720,105 +549,169 @@ namespace JdLoginTool.Wpf
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void ButtonSetCK_OnClick(object sender, RoutedEventArgs e)
+        private async void ButtonSetCK_OnClick(object sender, RoutedEventArgs e)
         {
             //todo:判定ck合法性,设置到浏览器
             var ck = Clipboard.GetText();
-            if (!IsCk(ck))
+            if (!Helper.IsCk(ck))
             {
                 ck = TextBox.Text;
             }
-            if (IsCk(ck))
-            {
-                SetCk(ck);
 
-                // GoToCart();
+            if (Helper.IsCk(ck))
+            {
+                await SetBrowserCk(ck);
+                //GetBrowserCk();
             }
             else
             {
-                SetPhone("");
+                WritePhone("");
             }
         }
 
-        private void SetCk(string ck)
-        {//todo:浏览器设置ck,参考退会那个Python项目
-            /*        # 写入Cookie
-        self.browser.delete_all_cookies()
-        for cookie in self.config['cookie'].split(";", 1):
-            self.browser.add_cookie(
-                {"name": cookie.split("=")[0].strip(" "), "value": cookie.split("=")[1].strip(";"), "domain": ".jd.com"}
-            )
-        self.browser.refresh()*/
-            var cm = Cef.GetGlobalCookieManager();
-            var cookie = JDCookie.parse(ck);
-            cm.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
+        private async Task SetBrowserCk(string ck)
+        {
+            var cookie = QingLongJdCookie.Parse(ck);
+            await CookieManager.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
             {
                 Domain = ".jd.com",
                 Name = "pt_pin",
                 Value = cookie.ptPin,
             });
-            cm.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
+            await CookieManager.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
             {
                 Domain = ".jd.com",
                 Name = "pt_key",
                 Value = cookie.ptKey,
             });
-
             Browser.ReloadCommand.Execute(null);
         }
 
-        private bool IsCk(string ck)
-        {
-            return ck.Contains("pt_key") && ck.Contains("pt_pin") && ck.Length > 20;
-        }
-        public List<string> Cookies = new List<string>();
+        public List<string> CookieStringList = new List<string>();
+        private ObservableCollection<User> _userList = new ObservableCollection<User>();
+
         private void ButtonReadAllCK_OnClick(object sender, RoutedEventArgs e)
+        {
+            ReadAllCK();
+        }
+
+        private void ReadAllCK()
         {
             try
             {
-                if (File.Exists(CookiePath))
+                if (!File.Exists(CookiePath))
                 {
                     File.Create(CookiePath);
                 }
-                Cookies = File.ReadAllLines(CookiePath).ToList();
+
+                CookieStringList = File.ReadAllLines(CookiePath).ToList();
+                CkIndex = 0;
+                if (string.IsNullOrWhiteSpace(JsBox.Text))
+                {
+                    this.JsBox.Text =
+                 "var btn=document.evaluate('id(\"vueContainer\")/div[@class=\"coupon - btns\"]/div[@class=\"btn\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;btn.click();";
+
+                }
             }
             catch (Exception exception)
             {
-                if (MessageOn.IsChecked == true)
-                {
-
-                }
-                else
-                {
-                    MessageBox.Show(exception.Message);
-                }
+                MessageBox.Show(exception.Message);
             }
         }
 
         public int CkIndex { get; set; } = 0;
-        private void ButtonReadNextCk_OnClick(object sender, RoutedEventArgs e)
+
+
+        private void AutoLoopRun()
+        {
+            if (IsRunning)
+            {
+                return;
+            }
+            Task.Factory.StartNew(async () =>
+            {
+                IsRunning = true;
+                while (CkIndex < CookieStringList.Count && !stop)
+                {
+                    try
+                    {
+                        var ck = "";
+                        var js = "";
+                        var url = "";
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            this.TextBox.Text = CookieStringList[CkIndex++];
+                            ck = this.TextBox.Text;
+                            js = this.JsBox.Text;
+                            url = this.UrlBox.Text;
+                        });
+                        await DoAction(ck, js, url);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+
+                    }
+
+                }
+
+                IsRunning = false;
+            });
+        }
+
+        private bool _IsRunning = false;
+
+        public bool IsRunning
+        {
+            get { return _IsRunning; }
+            set
+            {
+                _IsRunning = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public static string GetElement()
+        {
+            return "";
+            //todo:加载事件绑定(附加条件),监听鼠标右键也行,执行js获取鼠标位置的element(tostring)就是xpath,注入根据xpath获取element代码,
+
+        }
+
+        private async Task DoAction(string ck, string js, string url)
         {
             try
             {
-                this.TextBox.Text = Cookies[CkIndex++];
-                var ck = this.TextBox.Text;
-
-                if (IsCk(ck))
+                if (Helper.IsCk(ck))
                 {
-                    SetCk(ck);
-                    Browser.Address = this.UrlBox.Text;
-                    // GoToCart();
+                    await SetBrowserCk(ck);
+                    Browser.Load(url);
+                    Thread.Sleep(1000 * 3);
+                    if (!string.IsNullOrWhiteSpace(js))
+                    {
+                        await Task.Factory.StartNew(() =>
+                        {
+                            while (!stop && !EvaluateScript(js))
+                            {
+                                Thread.Sleep(1000 * 2);
+                                if (stop)
+                                {
+                                    break;
+                                }
+                            }
+                            Thread.Sleep(1000 * 2);
+                        });
+                    }
                 }
                 else
                 {
-                    SetPhone("");
+                    WritePhone("");
                 }
             }
             catch (Exception exception)
             {
                 if (MessageOn.IsChecked == true)
                 {
-
                 }
                 else
                 {
@@ -834,85 +727,407 @@ namespace JdLoginTool.Wpf
 
         private void ButtonDevTools_OnClick(object sender, RoutedEventArgs e)
         {
-
             Browser.ShowDevTools();
+        }
+
+        private void DataGrid_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LoginMode.IsChecked == true)
+            {
+                var phone = ((sender as DataGrid)?.SelectedItem as User)?.Phone;
+                if (!string.IsNullOrWhiteSpace(phone))
+                {
+                    TextBox.Text = ((sender as DataGrid).SelectedItem as User).Phone;
+                }
+
+                var userAgent = ((sender as DataGrid)?.SelectedItem as User)?.UserAgent;
+                if (!string.IsNullOrWhiteSpace(userAgent) && this.DefaultUA != userAgent)
+                {
+                    this.DefaultUA = userAgent;
+                }
+            }
+        }
+
+        private void ButtonCheckAllLogin_OnClick(object sender, RoutedEventArgs e)
+        {
+            var b = sender as Button;
+            b.IsEnabled = false;
+            Task.Factory.StartNew(() =>
+            {
+                foreach (var user in UserList)
+                {
+                    this.Dispatcher.Invoke(() =>
+                    {
+                        LogLabel.Content = $"{user.NickName}-{UserList.IndexOf(user)}/{UserList.Count}";
+                    });
+                    CheckAndUpdateUserState(user);
+                }
+
+                this.Dispatcher.Invoke(() =>
+                {
+                    LogLabel.Content = $"执行完成";
+                    b.IsEnabled = true;
+                });
+
+            });
 
         }
-    }
-
-    public class QLTokenResult
-    {
-        public int code { get; set; }
-        public Data data { get; set; }
-    }
-
-    public class Data
-    {
-        public string token { get; set; }
-        public string token_type { get; set; }
-        public int expiration { get; set; }
-    }
-    public class JDCookie
-    {
-        public String ptPin { get; set; }
-        public String ptKey { get; set; }
-
-        public static JDCookie parse(String ck)
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
         {
-            JDCookie jdCookie = new JDCookie();
+            var tb = sender as ToggleButton;
+            if (tb.IsChecked == true)
+            {
+                this.Width = 1405;
+            }
+            else
+            {
+                this.Width = 405;
+            }
+        }
+
+        public void ButtonCheckLogin_OnClick(object sender, RoutedEventArgs e)
+        {
+            var user = this.DataGrid.SelectedItem as User;
+            LogLabel.Content = $"{user.NickName}";
+            CheckAndUpdateUserState(user);
+        }
+
+        public static ObservableCollection<string> UAs
+        {
+            get => _uAs;
+            set
+            {
+                _uAs = value;
+            }
+        }
+        private string _defaultUa;
+
+        public string DefaultUA
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_defaultUa))
+                {
+                    _defaultUa = UAs.FirstOrDefault();
+                }
+                return _defaultUa;
+            }
+            set
+            {
+                _defaultUa = value;
+                RaisePropertyChanged();
+                JdService.ClientUserAgent = value;
+                File.WriteAllText("ua.txt", value);
+                if (MessageBox.Show("已切换新的UserAgent,是否重启?", "确认", MessageBoxButton.YesNoCancel) == MessageBoxResult.Yes)
+                {
+                    var fileName = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                    Process.Start(fileName.Replace("dll", "exe"));
+                    this.Dispatcher.Invoke((ThreadStart)delegate ()
+                        {
+                            Application.Current.Shutdown();
+                        }
+                    );
+                }
+            }
+        }
+
+        public MyCommand SaveCommand
+        {
+            get
+            {
+                return new MyCommand(() =>
+           {
+               this.IsSimpleMode = Visibility.Visible;
+           });
+            }
+        }
+
+        private static void CheckAndUpdateUserState(User user)
+        {
+            var re = JdService.GetUserInfo(user.CookieString);
+            if (re.msg == "success" && re.retcode == "0")
+            {
+                user.UserInfoData = re;
+                user.IsLogin = true;
+                if (user.AddressList == null || !user.AddressList.Any())
+                {
+                    user.AddressList = JdService.GetAddressList(user.CookieString);
+                }
+            }
+            else
+            {
+                user.IsLogin = false;
+            }
+        }
+
+        private bool EvaluateScript(string js)
+        {
             try
             {
-
-                String[] split = ck.Split(";");
-                foreach (var s in split)
+                var r = Application.Current.Dispatcher.Invoke(() =>
                 {
-                    if (s.StartsWith("pt_key"))
+                    try
                     {
-                        jdCookie.ptKey = (s.Split("=")[1]);
+                        var javascriptResponse = Browser.EvaluateScriptAsync(js, new TimeSpan(0, 0, 1)).Result;
+                        Console.WriteLine(javascriptResponse.Message);
+                        return javascriptResponse.Success;
                     }
-                    if (s.StartsWith("pt_pin"))
+                    catch (Exception e)
                     {
-                        jdCookie.ptPin = (s.Split("=")[1]);
+                        Console.WriteLine(e.Message);
+                        return true;
                     }
-                }
-                return jdCookie;
+                });
+                return r;
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
-                jdCookie = new JDCookie();
+                return false;
             }
-            return jdCookie;
+
         }
-
-
-        public override String ToString()
+        private void ButtonExecuteJS_OnClick(object sender, RoutedEventArgs e)
         {
-            return "pt_key=" + ptKey + ";pt_pin=" + ptPin + ";";
+            EvaluateScript(JsBox.Text);
+        }
+        private void ButtonEvaluateAll_OnClick(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+        private void ButtonEvaluate_OnClick(object sender, RoutedEventArgs e)
+        {
+
+        }
+
+
+        private void Mode2RB_OnChecked(object sender, RoutedEventArgs e)
+        {
+            ReadAllCK();
+        }
+
+        private void ButtonCronLoopRun_OnClick(object sender, RoutedEventArgs e)
+        {
+            stop = false;
+            var dateTime = DateTimePicker.Value;
+            Task.Factory.StartNew(() =>
+            {
+
+                while (DateTime.Now <= dateTime && !stop)
+                {
+                    Thread.Sleep(1000);
+                }
+                if (DateTime.Now >= dateTime && !stop)
+                {
+                    AutoLoopRun();
+                }
+            });
+        }
+
+        private bool exit = false;
+        private bool stop = false;
+        private static ObservableCollection<string> _uAs = new ObservableCollection<string>()
+        {"Mozilla/5.0 (iPhone; CPU iPhone OS 15_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 PrivaBrowser-iOS/0.75 Version/75 Safari/605.1.15",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/105.0.5195.98 Mobile/15E148 Safari/604.1",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
+     "Mozilla/5.0 (Linux; Android............like Gecko) Chrome/92.0.4515.105 HuaweiBrowser/12.1.2.311 Mobile Safari/537.36",
+
+      "jdapp;iPhone;11.2.6;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.2.5;;;Mozilla/5.0 (Linux; Android 9; Mi Note 3 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; GM1910 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 9; 16T Build/PKQ1.190616.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.1.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;11.2.6;;;Mozilla/5.0 (Linux; Android 11; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
+  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
+  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A6000 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
+  "jdapp;android;11.1.4;;;Mozilla/5.0 (Linux; Android 9; MHA-AL00 Build/HUAWEIMHA-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; 16 X Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 8.0.0; HTC U-3w Build/OPR6.170623.013; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; LYA-AL00 Build/HUAWEILYA-AL00L; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; Redmi K20 Pro Premium Edition Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 11; Redmi K20 Pro Premium Edition Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
+  "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; MI 8 Build/QKQ1.190828.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+    "jdapp;android;11.0.1;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A5010 Build/QKQ1.191014.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 10; Mi Note 5 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+  "jdapp;android;11.0.4;;;Mozilla/5.0 (Linux; Android 11; LIO-AN00 Build/HUAWEILIO-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; SKW-A0 Build/SKYW2001202CN00MQ0; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.8;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 12; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
+  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
+  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 12; HWI-AL00 Build/HUAWEIHWI-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; ANE-AL00 Build/HUAWEIANE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
+  "jdapp;android;10.5.2;;;Mozilla/5.0 (Linux; Android 9; ELE-AL00 Build/HUAWEIELE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 10; LIO-AL00 Build/HUAWEILIO-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; SM-G9750 Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 12; EVR-AL00 Build/HUAWEIEVR-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+  "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 9; HLK-AL00 Build/HONORHLK-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+  "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 10; LYA-AL10 Build/HUAWEILYA-AL10; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
+  "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; MI 9 Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+        };
+
+        private void ButtonStop_Click(object sender, RoutedEventArgs e)
+        {
+            stop = !stop;
+        }
+
+        private void ButtonGetElement_OnClick(object sender, RoutedEventArgs e)
+        {
+            Browser.EvaluateScriptAsync(File.ReadAllText("helper.js"));
+            //todo:定时去  Clipboard.GetText();获取xpath,用于循环执行时候
+        }
+
+        private void ButtonChangeUA_OnClick(object sender, RoutedEventArgs e)
+        {
+            JdService.ChangeUserAgent();
+
+        }
+
+
+        private void UrlBox_OnTextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(UrlBox.Text) || !UrlBox.Text.Contains("http"))
+            {
+                return;
+            }
+            File.WriteAllText("url.txt", UrlBox.Text);
+        }
+
+        private void ToggleButton_OnChecked(object sender, RoutedEventArgs e)
+        {
+            Task.Factory.StartNew(() => { ListenClipboard(); });
+        }
+        private void ListenClipboard()
+        {
+            var isChecked =true ;
+            this.Dispatcher.Invoke(() =>
+            {
+                isChecked= AutoListenCheckBox.IsChecked == true;
+            });
+
+            while (!exit&& isChecked)
+            {
+                this.Dispatcher.Invoke(() =>
+                {
+                    
+                    if (AutoListenCheckBox.IsChecked != true)
+                    {
+                       return;
+                    }
+                    var text = Clipboard.GetText();
+                    if (Helper.IsPhoneNumber(text))
+                    {
+                        ButtonSetPhone_OnClick(null, null);
+                    }
+
+                    if (Helper.IsCaptcha(text))
+                    {
+                        ButtonSetCaptcha_OnClick(null, null);
+                    }
+                    isChecked = AutoListenCheckBox.IsChecked == true;
+                });
+
+                Thread.Sleep(500);
+            }
         }
     }
 
-    public class GetCookiesResult
+
+    public static class ListExtension
     {
-        public int code { get; set; }
-        public Datum[] data { get; set; }
+        public static string ToCkString(this IEnumerable<Cookie> cks)
+        {
+            cks = cks.OrderBy(c => c.Name).ToList();
+            var re = "";
+            if (cks.Any())
+            {
+                foreach (var ck in cks)
+                {
+                    Regex reg = new Regex(@"[\u4e00-\u9fa5]");
+                    if (reg.IsMatch(ck.Value))
+                    {
+                        re += $"{ck.Name}={System.Web.HttpUtility.UrlEncode(ck.Value)};";
+                    }
+                    else
+                    {
+                        re += $"{ck.Name}={ck.Value};";
+                    }
+                }
+            }
+
+            return re;
+        }
     }
-
-
-
-
-
-
-    public class Datum
+    public class MyCommand : ICommand
     {
-        public string value { get; set; }
-        public int id { get; set; }
-        public long created { get; set; }
-        public int status { get; set; }
-        public string timestamp { get; set; }
-        public float position { get; set; }
-        public string name { get; set; }
-        public string remarks { get; set; }
+        private Action _execute;
+        private Func<bool> _canExecute;
+
+        public MyCommand(Action execute, Func<bool> canExecute = null)
+        {
+            _execute = execute;
+            _canExecute = canExecute;
+        }
+
+        public event EventHandler CanExecuteChanged;
+
+        public bool CanExecute(object parameter)
+        {
+            return _canExecute?.Invoke() ?? true;
+        }
+
+        public void Execute(object parameter)
+        {
+            _execute?.Invoke();
+        }
+
+        public void RaiseCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
 }
+
+
+

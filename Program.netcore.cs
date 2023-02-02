@@ -2,6 +2,7 @@
 using CefSharp.Wpf;
 using System;
 using System.IO;
+using JdLoginTool.Wpf.Service;
 
 namespace JdLoginTool.Wpf
 {
@@ -35,20 +36,22 @@ namespace JdLoginTool.Wpf
                 //By default CefSharp will use an in-memory cache, you need to specify a Cache Folder to persist data
                 CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CefSharp\\Cache"),
                 BrowserSubprocessPath = exePath,
-                UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1"
 
+                UserAgent = JdService.ClientUserAgent
             };
-
+            if (File.Exists("ua.txt"))
+            {
+                settings.UserAgent = File.ReadAllText("ua.txt");
+            }
             //Example of setting a command line argument
             //Enables WebRTC
             settings.CefCommandLineArgs.Add("enable-media-stream");
 
             //Perform dependency check to make sure all relevant resources are in our output directory.
             Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
-
             var app = new App();
-            app.InitializeComponent(); 
+            app.InitializeComponent();
             return app.Run();
-        } 
+        }
     }
 }
