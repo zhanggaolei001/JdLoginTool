@@ -40,7 +40,7 @@ namespace JdLoginTool.Wpf
     }
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        private Visibility _IsSimpleMode = Visibility.Collapsed;
+        private Visibility _IsSimpleMode = Visibility.Hidden;
 
         public Visibility IsSimpleMode
         {
