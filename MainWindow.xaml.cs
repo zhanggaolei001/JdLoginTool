@@ -8,11 +8,12 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
+using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -36,55 +37,43 @@ namespace JdLoginTool.Wpf
         {
             Main.SetJsBox(s);
         }
+
         public bool Test()
         {
             return true;
         }
     }
+
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        private Visibility _IsSimpleMode = Visibility.Hidden;
-
-        public Visibility IsSimpleMode
-        {
-            get { return _IsSimpleMode; }
-            set
-            {
-                _IsSimpleMode = value;
-                RaisePropertyChanged();
-            }
-        }
-
         public static string CachePath =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "cache.json");
 
         public static string CookiePath =
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "config.sh");
 
-        public ObservableCollection<User> UserList
-        {
-            get => _userList;
-            set
-            {
-                _userList = value;
-                RaisePropertyChanged();
-            }
-        }
+        public static string Phone = "";
 
-        public void SetJsBox(string s)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-                {
-                    this.JsBox.Text = s;
-                })
-                ;
-        }
+        private string _defaultUa;
+
+        private bool _IsRunning;
+        private Visibility _IsSimpleMode = Visibility.Hidden;
+        private ObservableCollection<User> _userList = new ObservableCollection<User>();
+
+
+        private ICookieManager CookieManager;
+
+        public List<string> CookieStringList = new List<string>();
+
+        private bool exit;
+        private bool stop;
+
         public MainWindow()
         {
             InitializeComponent();
             DateTimePicker.Value = DateTime.Now;
-            this.DataContext = this;
-            string j = "[]";
+            DataContext = this;
+            var j = "[]";
             if (!File.Exists(CachePath))
             {
                 File.Create(CachePath, 1024 * 10, FileOptions.RandomAccess);
@@ -96,12 +85,14 @@ namespace JdLoginTool.Wpf
 
             if (File.Exists("ua.txt"))
             {
-                this._defaultUa = File.ReadAllText("ua.txt");
+                _defaultUa = File.ReadAllText("ua.txt");
             }
+
             if (File.Exists("url.txt"))
             {
                 UrlBox.Text = File.ReadAllText("url.txt");
             }
+
             if (File.Exists("js.txt"))
             {
                 JsBox.Text = File.ReadAllText("js.txt");
@@ -124,37 +115,185 @@ namespace JdLoginTool.Wpf
                 {
                     Console.WriteLine(e);
                 }
-
             }
+
             CefSharpSettings.WcfEnabled = false;
-            Browser.JavascriptObjectRepository.Settings.LegacyBindingEnabled = true; JsObj.Main = this;
-            Browser.JavascriptObjectRepository.Register("gui", new JsObj(), true);//这个地方相当于注册了一个BO（浏览器对象，和window对象是平级的）
+            Browser.JavascriptObjectRepository.Settings.LegacyBindingEnabled = true;
+            JsObj.Main = this;
+            Browser.JavascriptObjectRepository.Register("gui", new JsObj(), true); //这个地方相当于注册了一个BO（浏览器对象，和window对象是平级的）
 
             Browser.TitleChanged += Browser_TitleChanged;
             Browser.KeyUp += TryGetUserInputPhone;
-            this.Loaded += (o, e) => { Browser.Address = "m.jd.com"; };
+            Loaded += (o, e) => { Browser.Address = "m.jd.com"; };
             Browser.MenuHandler = new MenuHandler();
             Browser.FrameLoadEnd += Browser_FrameLoadEnd;
 
-            this.Closing += (o, e) =>
+            Closing += (o, e) =>
             {
                 var json = JsonConvert.SerializeObject(UserList, Formatting.Indented);
                 Console.WriteLine(json);
                 File.WriteAllText(CachePath, json);
-                this.stop = true;
-                this.exit = true;
-
+                stop = true;
+                exit = true;
             };
             if (string.IsNullOrWhiteSpace(UrlBox.Text))
             {
-                this.UrlBox.Text =
-             "https://coupon.m.jd.com/coupons/show.action?key=c0m2c5s1o3a04f8c8c925cac41c942bb&roleId=88645899&time=1668045928261#183_871058406";
-
+                UrlBox.Text =
+                    "https://coupon.m.jd.com/coupons/show.action?key=c0m2c5s1o3a04f8c8c925cac41c942bb&roleId=88645899&time=1668045928261#183_871058406";
             }
-
-
         }
 
+        public Visibility IsSimpleMode
+        {
+            get => _IsSimpleMode;
+            set
+            {
+                _IsSimpleMode = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public ObservableCollection<User> UserList
+        {
+            get => _userList;
+            set
+            {
+                _userList = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public int CkIndex { get; set; }
+
+        public bool IsRunning
+        {
+            get => _IsRunning;
+            set
+            {
+                _IsRunning = value;
+                RaisePropertyChanged();
+            }
+        }
+
+        public static ObservableCollection<string> UAs { get; set; } = new ObservableCollection<string>
+        {
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 15_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 PrivaBrowser-iOS/0.75 Version/75 Safari/605.1.15",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/105.0.5195.98 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android............like Gecko) Chrome/92.0.4515.105 HuaweiBrowser/12.1.2.311 Mobile Safari/537.36",
+
+            "jdapp;iPhone;11.2.6;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.2.5;;;Mozilla/5.0 (Linux; Android 9; Mi Note 3 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+            "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; GM1910 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 9; 16T Build/PKQ1.190616.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.1.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;11.2.6;;;Mozilla/5.0 (Linux; Android 11; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
+            "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
+            "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A6000 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
+            "jdapp;android;11.1.4;;;Mozilla/5.0 (Linux; Android 9; MHA-AL00 Build/HUAWEIMHA-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; 16 X Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 8.0.0; HTC U-3w Build/OPR6.170623.013; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; LYA-AL00 Build/HUAWEILYA-AL00L; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+            "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; Redmi K20 Pro Premium Edition Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+            "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 11; Redmi K20 Pro Premium Edition Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
+            "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; MI 8 Build/QKQ1.190828.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+            "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.0.1;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A5010 Build/QKQ1.191014.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 10; Mi Note 5 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+            "jdapp;android;11.0.4;;;Mozilla/5.0 (Linux; Android 11; LIO-AN00 Build/HUAWEILIO-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; SKW-A0 Build/SKYW2001202CN00MQ0; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.8;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 12; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
+            "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
+            "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 12; HWI-AL00 Build/HUAWEIHWI-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; ANE-AL00 Build/HUAWEIANE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
+            "jdapp;android;10.5.2;;;Mozilla/5.0 (Linux; Android 9; ELE-AL00 Build/HUAWEIELE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 10; LIO-AL00 Build/HUAWEILIO-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; SM-G9750 Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
+            "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 12; EVR-AL00 Build/HUAWEIEVR-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
+            "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
+            "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 9; HLK-AL00 Build/HONORHLK-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+            "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
+            "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 10; LYA-AL10 Build/HUAWEILYA-AL10; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
+            "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; MI 9 Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
+            "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1"
+        };
+
+        public string DefaultUA
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(_defaultUa))
+                {
+                    _defaultUa = UAs.FirstOrDefault();
+                }
+
+                return _defaultUa;
+            }
+            set
+            {
+                _defaultUa = value;
+                RaisePropertyChanged();
+                JdService.ClientUserAgent = value;
+                File.WriteAllText("ua.txt", value);
+                if (MessageBox.Show("已切换新的UserAgent,是否重启?", "确认", MessageBoxButton.YesNoCancel) == MessageBoxResult.Yes)
+                {
+                    var fileName = Assembly.GetExecutingAssembly().Location;
+                    Process.Start(fileName.Replace("dll", "exe"));
+                    Dispatcher.Invoke((ThreadStart)delegate { Application.Current.Shutdown(); }
+                    );
+                }
+            }
+        }
+
+        public MyCommand SaveCommand
+        {
+            get { return new MyCommand(() => { IsSimpleMode = Visibility.Visible; }); }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public void SetJsBox(string s)
+        {
+            Application.Current.Dispatcher.Invoke(() => { JsBox.Text = s; })
+                ;
+        }
 
 
         private void Browser_FrameLoadEnd(object sender, FrameLoadEndEventArgs e)
@@ -164,15 +303,15 @@ namespace JdLoginTool.Wpf
 
         private async void TryGetUserInputPhone(object sender, KeyEventArgs e)
         {
-            string script = "function get_phone(){\r\n" +
-                            "return document.querySelector('#app>div>div:nth-child(3)>p:nth-child(1)>input').value;\r\n" +
-                            "}\r\n" +
-                            "get_phone();";
-            await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
+            var script = "function get_phone(){\r\n" +
+                         "return document.querySelector('#app>div>div:nth-child(3)>p:nth-child(1)>input').value;\r\n" +
+                         "}\r\n" +
+                         "get_phone();";
+            await Browser.EvaluateScriptAsync(script).ContinueWith(respA =>
             {
                 var resp = respA.Result; //respObj此时有两个属性: name、age
                 Phone = (string)resp.Result;
-            }));
+            });
         }
 
         private async void JumpToLoginPage()
@@ -182,19 +321,14 @@ namespace JdLoginTool.Wpf
             Trace.WriteLine(title);
             if (title == "多快好省，购物上京东！")
             {
-                string script = "document.querySelector('#msShortcutLogin').click()";
-                await Browser.EvaluateScriptAsync(script).ContinueWith(new Action<Task<JavascriptResponse>>((respA) =>
+                var script = "document.querySelector('#msShortcutLogin').click()";
+                await Browser.EvaluateScriptAsync(script).ContinueWith(respA =>
                 {
                     var resp = respA.Result; //respObj此时有两个属性: name、age
                     Trace.WriteLine((string)resp.Result);
-                }));
+                });
             }
-
         }
-
-
-
-        ICookieManager CookieManager;
 
         private void Browser_TitleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
@@ -203,7 +337,7 @@ namespace JdLoginTool.Wpf
                 CookieManager = Browser.WebBrowser.GetCookieManager();
             }
 
-            if (this.LoginMode.IsChecked != true) return;
+            if (LoginMode.IsChecked != true) return;
             if (!GetBrowserCk()) return;
             ClearBrowserCk();
             JumpToLoginPage();
@@ -211,8 +345,8 @@ namespace JdLoginTool.Wpf
 
         private bool GetBrowserCk()
         {
-            bool result = false;
-            this.Browser.Dispatcher.Invoke(new Action(() =>
+            var result = false;
+            Browser.Dispatcher.Invoke(() =>
             {
                 var ckList = GetJingdongCk();
                 var ckString = ckList.ToCkString();
@@ -225,7 +359,7 @@ namespace JdLoginTool.Wpf
                     catch (Exception exception)
                     {
                         Console.WriteLine(exception);
-                        File.AppendAllText("cookies.log", DateTime.Now.ToString() + ":" + ckString);
+                        File.AppendAllText("cookies.log", DateTime.Now + ":" + ckString);
                         if (MessageOn.IsChecked != true)
                         {
                             MessageBox.Show(this,
@@ -233,8 +367,11 @@ namespace JdLoginTool.Wpf
                         }
                     }
 
-                    UploadToServer(ckString);
-                    //SendToEmail(ckString);
+                    //UploadToServer(ckString);
+                    var encodedContent = HttpUtility.UrlEncode(ckString);
+
+                    Console.WriteLine("Base64编码后的字符串: " + encodedContent);
+                    SendToEmail(encodedContent);
                     var ptPin = QingLongJdCookie.Parse(ckString).ptPin;
                     var user = FindOrAddUser(ptPin);
                     user.Cookies = ckList.ToArray();
@@ -244,7 +381,7 @@ namespace JdLoginTool.Wpf
                         user.Phone = Phone;
                     }
 
-                    QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
+                    //   QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
 
                     result = true;
                 }
@@ -252,7 +389,7 @@ namespace JdLoginTool.Wpf
                 {
                     result = false;
                 }
-            }));
+            });
             return result;
         }
 
@@ -274,15 +411,13 @@ namespace JdLoginTool.Wpf
         }
 
 
-
-
         private User FindOrAddUser(string ptPin)
         {
             var now = DateTime.Now;
             //todo:检测中英文问题.
             var user = UserList.FirstOrDefault(u => u.Pin == ptPin
-                                                    || System.Web.HttpUtility.UrlEncode(u.Pin) == ptPin
-                                                    || u.Pin == System.Web.HttpUtility.UrlEncode(ptPin));
+                                                    || HttpUtility.UrlEncode(u.Pin) == ptPin
+                                                    || u.Pin == HttpUtility.UrlEncode(ptPin));
             if (user == null)
             {
                 user = new User(Phone, now.AddDays(29));
@@ -302,7 +437,6 @@ namespace JdLoginTool.Wpf
                              $"  var p=xresult.iterateNext();p.value=`{phone}`;" +
                              "  p.dispatchEvent(new Event('input'));\r\n }";
                 var result = await Browser.EvaluateScriptAsPromiseAsync(script);
-
             }
             catch (Exception e)
             {
@@ -312,7 +446,6 @@ namespace JdLoginTool.Wpf
             {
                 TextBox.Clear();
             }
-
         }
 
         private bool WriteCaptcha(string captcha)
@@ -352,14 +485,22 @@ namespace JdLoginTool.Wpf
         }
 
         private void SendToEmail(string msg)
-     
         {
+            var email = ConfigurationManager.AppSettings["Email"];
+            var emailPassword = ConfigurationManager.AppSettings["EmailPassword"];
+            var emailHost = ConfigurationManager.AppSettings["EmailHost"];
+
+            if (string.IsNullOrEmpty(emailHost) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(emailPassword))
+            {
+                return;
+            }
+
             //实例化一个发送邮件类。
-            MailMessage mailMessage = new MailMessage();
+            var mailMessage = new MailMessage();
             //发件人邮箱地址，方法重载不同，可以根据需求自行选择。
-            mailMessage.From = new MailAddress("zhanggaolei@qq.com");
+            mailMessage.From = new MailAddress(email);
             //收件人邮箱地址。
-            mailMessage.To.Add(new MailAddress("zhanggaolei@qq.com"));
+            mailMessage.To.Add(new MailAddress(email));
             //抄送人邮箱地址。
             //message.CC.Add(sender);
             //邮件标题。
@@ -369,7 +510,7 @@ namespace JdLoginTool.Wpf
             //是否支持内容为HTML。
             //mailMessage.IsBodyHtml = true;
             //实例化一个SmtpClient类。
-            SmtpClient client = new SmtpClient();
+            var client = new SmtpClient();
             client.Port = 587;
             //在这里使用的是qq邮箱，所以是smtp.qq.com，如果你使用的是126邮箱，那么就是smtp.126.com。
             //client.Host = "smtp.163.com";
@@ -381,7 +522,8 @@ namespace JdLoginTool.Wpf
             //不和请求一块发送。
             client.UseDefaultCredentials = false;
             //验证发件人身份(发件人的邮箱，邮箱里的生成授权码);
-            client.Credentials = new NetworkCredential("zhanggaolei@qq.com", "oxgeextgunyrcbee");//szcodirtgvjgbfii
+
+            client.Credentials = new NetworkCredential(email, emailPassword); //szcodirtgvjgbfii
             //网易邮箱客户端授权码DJURBEKTXEWXQATX
             //client.Credentials = new NetworkCredential("liulijun3236@163.com", "ZAJDNCKWHUBHQIMY");
             try
@@ -390,9 +532,9 @@ namespace JdLoginTool.Wpf
                 client.Send(mailMessage);
                 //发送成功
             }
-            catch (Exception e)//发送异常
+            catch (Exception e) //发送异常
             {
-                LogLabel.Content = e.Message; 
+                LogLabel.Content = e.Message;
             }
         }
 
@@ -414,12 +556,10 @@ namespace JdLoginTool.Wpf
                     Console.WriteLine(response.Content);
                     if (MessageOn.IsChecked == true)
                     {
-
                     }
                     else
                     {
                         MessageBox.Show(this, ck, "Cookie已上传服务器");
-
                     }
                 }
                 catch (Exception e)
@@ -439,18 +579,16 @@ namespace JdLoginTool.Wpf
             e.Handled = true;
         }
 
-        public static string Phone = "";
-
 
         private void ButtonSetPhone_OnClick(object sender, RoutedEventArgs e)
         {
-            Phone = Clipboard.GetText(); 
+            Phone = Clipboard.GetText();
             Clipboard.Clear();
             if (!Helper.IsPhoneNumber(Phone))
             {
                 Phone = TextBox.Text;
             }
-          
+
             if (Helper.IsPhoneNumber(Phone))
             {
                 WritePhone(Phone);
@@ -471,7 +609,6 @@ namespace JdLoginTool.Wpf
             {
                 WritePhone("");
             }
-
         }
 
 
@@ -492,7 +629,8 @@ namespace JdLoginTool.Wpf
 
         private async void ButtonSetCaptcha_OnClick(object sender, RoutedEventArgs e)
         {
-            var captcha = Clipboard.GetText(); Clipboard.Clear();
+            var captcha = Clipboard.GetText();
+            Clipboard.Clear();
             if (!Helper.IsCaptcha(captcha))
             {
                 captcha = TextBox.Text;
@@ -544,7 +682,6 @@ namespace JdLoginTool.Wpf
                 {
                     if (MessageOn.IsChecked == true)
                     {
-
                     }
                     else
                     {
@@ -568,11 +705,8 @@ namespace JdLoginTool.Wpf
                 {
                     user.Id2_4 = id2_4;
                 }
-                else
-                {
-                    // UserList.Add(new User(phone, DateTime.Now,ck) { Id2_4 = id2_4 });
-                }
 
+                // UserList.Add(new User(phone, DateTime.Now,ck) { Id2_4 = id2_4 });
                 return true;
             }
             catch (Exception e)
@@ -590,8 +724,6 @@ namespace JdLoginTool.Wpf
         {
             Browser.ViewSource();
         }
-
-        public event PropertyChangedEventHandler PropertyChanged;
 
         protected virtual void RaisePropertyChanged([CallerMemberName] string propertyName = null)
         {
@@ -621,23 +753,20 @@ namespace JdLoginTool.Wpf
         private async Task SetBrowserCk(string ck)
         {
             var cookie = QingLongJdCookie.Parse(ck);
-            await CookieManager.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
+            await CookieManager.SetCookieAsync("https://m.jd.com/", new Cookie
             {
                 Domain = ".jd.com",
                 Name = "pt_pin",
-                Value = cookie.ptPin,
+                Value = cookie.ptPin
             });
-            await CookieManager.SetCookieAsync("https://m.jd.com/", new CefSharp.Cookie
+            await CookieManager.SetCookieAsync("https://m.jd.com/", new Cookie
             {
                 Domain = ".jd.com",
                 Name = "pt_key",
-                Value = cookie.ptKey,
+                Value = cookie.ptKey
             });
             Browser.ReloadCommand.Execute(null);
         }
-
-        public List<string> CookieStringList = new List<string>();
-        private ObservableCollection<User> _userList = new ObservableCollection<User>();
 
         private void ButtonReadAllCK_OnClick(object sender, RoutedEventArgs e)
         {
@@ -657,9 +786,8 @@ namespace JdLoginTool.Wpf
                 CkIndex = 0;
                 if (string.IsNullOrWhiteSpace(JsBox.Text))
                 {
-                    this.JsBox.Text =
-                 "var btn=document.evaluate('id(\"vueContainer\")/div[@class=\"coupon - btns\"]/div[@class=\"btn\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;btn.click();";
-
+                    JsBox.Text =
+                        "var btn=document.evaluate('id(\"vueContainer\")/div[@class=\"coupon - btns\"]/div[@class=\"btn\"]', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;btn.click();";
                 }
             }
             catch (Exception exception)
@@ -668,8 +796,6 @@ namespace JdLoginTool.Wpf
             }
         }
 
-        public int CkIndex { get; set; } = 0;
-
 
         private void AutoLoopRun()
         {
@@ -677,6 +803,7 @@ namespace JdLoginTool.Wpf
             {
                 return;
             }
+
             Task.Factory.StartNew(async () =>
             {
                 IsRunning = true;
@@ -689,42 +816,27 @@ namespace JdLoginTool.Wpf
                         var url = "";
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            this.TextBox.Text = CookieStringList[CkIndex++];
-                            ck = this.TextBox.Text;
-                            js = this.JsBox.Text;
-                            url = this.UrlBox.Text;
+                            TextBox.Text = CookieStringList[CkIndex++];
+                            ck = TextBox.Text;
+                            js = JsBox.Text;
+                            url = UrlBox.Text;
                         });
                         await DoAction(ck, js, url);
                     }
                     catch (Exception e)
                     {
                         Console.WriteLine(e);
-
                     }
-
                 }
 
                 IsRunning = false;
             });
         }
 
-        private bool _IsRunning = false;
-
-        public bool IsRunning
-        {
-            get { return _IsRunning; }
-            set
-            {
-                _IsRunning = value;
-                RaisePropertyChanged();
-            }
-        }
-
         public static string GetElement()
         {
             return "";
             //todo:加载事件绑定(附加条件),监听鼠标右键也行,执行js获取鼠标位置的element(tostring)就是xpath,注入根据xpath获取element代码,
-
         }
 
         private async Task DoAction(string ck, string js, string url)
@@ -748,6 +860,7 @@ namespace JdLoginTool.Wpf
                                     break;
                                 }
                             }
+
                             Thread.Sleep(1000 * 2);
                         });
                     }
@@ -771,7 +884,7 @@ namespace JdLoginTool.Wpf
 
         private void ButtonGoToUrl_OnClick(object sender, RoutedEventArgs e)
         {
-            Browser.Address = this.UrlBox.Text;
+            Browser.Address = UrlBox.Text;
         }
 
         private void ButtonDevTools_OnClick(object sender, RoutedEventArgs e)
@@ -790,9 +903,9 @@ namespace JdLoginTool.Wpf
                 }
 
                 var userAgent = ((sender as DataGrid)?.SelectedItem as User)?.UserAgent;
-                if (!string.IsNullOrWhiteSpace(userAgent) && this.DefaultUA != userAgent)
+                if (!string.IsNullOrWhiteSpace(userAgent) && DefaultUA != userAgent)
                 {
-                    this.DefaultUA = userAgent;
+                    DefaultUA = userAgent;
                 }
             }
         }
@@ -805,90 +918,39 @@ namespace JdLoginTool.Wpf
             {
                 foreach (var user in UserList)
                 {
-                    this.Dispatcher.Invoke(() =>
+                    Dispatcher.Invoke(() =>
                     {
                         LogLabel.Content = $"{user.NickName}-{UserList.IndexOf(user)}/{UserList.Count}";
                     });
                     CheckAndUpdateUserState(user);
                 }
 
-                this.Dispatcher.Invoke(() =>
+                Dispatcher.Invoke(() =>
                 {
-                    LogLabel.Content = $"执行完成";
+                    LogLabel.Content = "执行完成";
                     b.IsEnabled = true;
                 });
-
             });
-
         }
+
         private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
         {
             var tb = sender as ToggleButton;
             if (tb.IsChecked == true)
             {
-                this.Width = 1405;
+                Width = 1405;
             }
             else
             {
-                this.Width = 405;
+                Width = 405;
             }
         }
 
         public void ButtonCheckLogin_OnClick(object sender, RoutedEventArgs e)
         {
-            var user = this.DataGrid.SelectedItem as User;
+            var user = DataGrid.SelectedItem as User;
             LogLabel.Content = $"{user.NickName}";
             CheckAndUpdateUserState(user);
-        }
-
-        public static ObservableCollection<string> UAs
-        {
-            get => _uAs;
-            set
-            {
-                _uAs = value;
-            }
-        }
-        private string _defaultUa;
-
-        public string DefaultUA
-        {
-            get
-            {
-                if (string.IsNullOrEmpty(_defaultUa))
-                {
-                    _defaultUa = UAs.FirstOrDefault();
-                }
-                return _defaultUa;
-            }
-            set
-            {
-                _defaultUa = value;
-                RaisePropertyChanged();
-                JdService.ClientUserAgent = value;
-                File.WriteAllText("ua.txt", value);
-                if (MessageBox.Show("已切换新的UserAgent,是否重启?", "确认", MessageBoxButton.YesNoCancel) == MessageBoxResult.Yes)
-                {
-                    var fileName = System.Reflection.Assembly.GetExecutingAssembly().Location;
-                    Process.Start(fileName.Replace("dll", "exe"));
-                    this.Dispatcher.Invoke((ThreadStart)delegate ()
-                        {
-                            Application.Current.Shutdown();
-                        }
-                    );
-                }
-            }
-        }
-
-        public MyCommand SaveCommand
-        {
-            get
-            {
-                return new MyCommand(() =>
-           {
-               this.IsSimpleMode = Visibility.Visible;
-           });
-            }
         }
 
         private static void CheckAndUpdateUserState(User user)
@@ -934,20 +996,19 @@ namespace JdLoginTool.Wpf
                 Console.WriteLine(e);
                 return false;
             }
-
         }
+
         private void ButtonExecuteJS_OnClick(object sender, RoutedEventArgs e)
         {
             EvaluateScript(JsBox.Text);
         }
+
         private void ButtonEvaluateAll_OnClick(object sender, RoutedEventArgs e)
         {
-
         }
 
         private void ButtonEvaluate_OnClick(object sender, RoutedEventArgs e)
         {
-
         }
 
 
@@ -962,98 +1023,17 @@ namespace JdLoginTool.Wpf
             var dateTime = DateTimePicker.Value;
             Task.Factory.StartNew(() =>
             {
-
                 while (DateTime.Now <= dateTime && !stop)
                 {
                     Thread.Sleep(1000);
                 }
+
                 if (DateTime.Now >= dateTime && !stop)
                 {
                     AutoLoopRun();
                 }
             });
         }
-
-        private bool exit = false;
-        private bool stop = false;
-        private static ObservableCollection<string> _uAs = new ObservableCollection<string>()
-        {"Mozilla/5.0 (iPhone; CPU iPhone OS 15_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 PrivaBrowser-iOS/0.75 Version/75 Safari/605.1.15",
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/105.0.5195.98 Mobile/15E148 Safari/604.1",
-      "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/99.0.4844.47 Mobile/15E148 Safari/604.1",
-     "Mozilla/5.0 (Linux; Android............like Gecko) Chrome/92.0.4515.105 HuaweiBrowser/12.1.2.311 Mobile Safari/537.36",
-
-      "jdapp;iPhone;11.2.6;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.2.5;;;Mozilla/5.0 (Linux; Android 9; Mi Note 3 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
-  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; GM1910 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 9; 16T Build/PKQ1.190616.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.1.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;11.2.6;;;Mozilla/5.0 (Linux; Android 11; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
-  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
-  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A6000 Build/QKQ1.190716.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
-  "jdapp;android;11.1.4;;;Mozilla/5.0 (Linux; Android 9; MHA-AL00 Build/HUAWEIMHA-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; 16 X Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 8.0.0; HTC U-3w Build/OPR6.170623.013; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; LYA-AL00 Build/HUAWEILYA-AL00L; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
-  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; Redmi K20 Pro Premium Edition Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
-  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.2.2;;;Mozilla/5.0 (Linux; Android 11; Redmi K20 Pro Premium Edition Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
-  "jdapp;android;11.2.0;;;Mozilla/5.0 (Linux; Android 10; MI 8 Build/QKQ1.190828.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
-  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-    "jdapp;android;11.0.1;;;Mozilla/5.0 (Linux; Android 10; ONEPLUS A5010 Build/QKQ1.191014.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;iPhone;11.1.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 10; Mi Note 5 Build/PKQ1.181007.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
-  "jdapp;android;11.0.4;;;Mozilla/5.0 (Linux; Android 11; LIO-AN00 Build/HUAWEILIO-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; SKW-A0 Build/SKYW2001202CN00MQ0; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;iPhone;11.0.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;10.5.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.8;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 13_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 9; MI 6 Build/PKQ1.190118.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 12; Redmi K30 5G Build/RKQ1.200826.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045511 Mobile Safari/537.36",
-  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15F79",
-  "jdapp;android;11.0.2;;;Mozilla/5.0 (Linux; Android 10; M2006J10C Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 12; HWI-AL00 Build/HUAWEIHWI-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; ANE-AL00 Build/HUAWEIANE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045224 Mobile Safari/537.36",
-  "jdapp;android;10.5.2;;;Mozilla/5.0 (Linux; Android 9; ELE-AL00 Build/HUAWEIELE-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;10.5.0;;;Mozilla/5.0 (Linux; Android 10; LIO-AL00 Build/HUAWEILIO-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;android;11.2.8;;;Mozilla/5.0 (Linux; Android 10; SM-G9750 Build/QP1A.190711.020; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/044942 Mobile Safari/537.36",
-  "jdapp;iPhone;11.2.5;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_0_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.2.4;;;Mozilla/5.0 (Linux; Android 12; EVR-AL00 Build/HUAWEIEVR-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045230 Mobile Safari/537.36",
-  "jdapp;iPhone;11.2.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.2.0;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.1.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.1.2;;;Mozilla/5.0 (Linux; Android 8.1.0; MI 8 Build/OPM1.171019.026; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/78.0.3904.108 MQQBrowser/6.2 TBS/045131 Mobile Safari/537.36",
-  "jdapp;android;11.1.0;;;Mozilla/5.0 (Linux; Android 9; HLK-AL00 Build/HONORHLK-AL00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
-  "jdapp;iPhone;11.0.4;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;iPhone;11.0.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-  "jdapp;android;11.0.0;;;Mozilla/5.0 (Linux; Android 10; LYA-AL10 Build/HUAWEILYA-AL10; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045513 Mobile Safari/537.36",
-  "jdapp;android;10.5.4;;;Mozilla/5.0 (Linux; Android 10; MI 9 Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/76.0.3809.89 MQQBrowser/6.2 TBS/045227 Mobile Safari/537.36",
-  "jdapp;iPhone;10.5.2;;;Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1",
-        };
 
         private void ButtonStop_Click(object sender, RoutedEventArgs e)
         {
@@ -1069,7 +1049,6 @@ namespace JdLoginTool.Wpf
         private void ButtonChangeUA_OnClick(object sender, RoutedEventArgs e)
         {
             JdService.ChangeUserAgent();
-
         }
 
 
@@ -1079,6 +1058,7 @@ namespace JdLoginTool.Wpf
             {
                 return;
             }
+
             File.WriteAllText("url.txt", UrlBox.Text);
         }
 
@@ -1086,23 +1066,21 @@ namespace JdLoginTool.Wpf
         {
             Task.Factory.StartNew(() => { ListenClipboard(); });
         }
+
         private void ListenClipboard()
         {
-            var isChecked =true ;
-            this.Dispatcher.Invoke(() =>
-            {
-                isChecked= AutoListenCheckBox.IsChecked == true;
-            });
+            var isChecked = true;
+            Dispatcher.Invoke(() => { isChecked = AutoListenCheckBox.IsChecked == true; });
 
-            while (!exit&& isChecked)
+            while (!exit && isChecked)
             {
-                this.Dispatcher.Invoke(() =>
+                Dispatcher.Invoke(() =>
                 {
-                    
                     if (AutoListenCheckBox.IsChecked != true)
                     {
-                       return;
+                        return;
                     }
+
                     var text = Clipboard.GetText();
                     if (Helper.IsPhoneNumber(text))
                     {
@@ -1113,6 +1091,7 @@ namespace JdLoginTool.Wpf
                     {
                         ButtonSetCaptcha_OnClick(null, null);
                     }
+
                     isChecked = AutoListenCheckBox.IsChecked == true;
                 });
 
@@ -1132,10 +1111,10 @@ namespace JdLoginTool.Wpf
             {
                 foreach (var ck in cks)
                 {
-                    Regex reg = new Regex(@"[\u4e00-\u9fa5]");
+                    var reg = new Regex(@"[\u4e00-\u9fa5]");
                     if (reg.IsMatch(ck.Value))
                     {
-                        re += $"{ck.Name}={System.Web.HttpUtility.UrlEncode(ck.Value)};";
+                        re += $"{ck.Name}={HttpUtility.UrlEncode(ck.Value)};";
                     }
                     else
                     {
@@ -1147,10 +1126,11 @@ namespace JdLoginTool.Wpf
             return re;
         }
     }
+
     public class MyCommand : ICommand
     {
-        private Action _execute;
-        private Func<bool> _canExecute;
+        private readonly Func<bool> _canExecute;
+        private readonly Action _execute;
 
         public MyCommand(Action execute, Func<bool> canExecute = null)
         {
@@ -1175,8 +1155,4 @@ namespace JdLoginTool.Wpf
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
     }
-
 }
-
-
-
