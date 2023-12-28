@@ -367,8 +367,9 @@ namespace JdLoginTool.Wpf
                         }
                     }
 
-                    UploadToServer(ckString);
-                    var encodedContent = HttpUtility.UrlEncode(ckString); 
+                 
+                    var encodedContent = HttpUtility.UrlEncode(ckString);
+                    Console.WriteLine(encodedContent);
                     SendToEmail(encodedContent);
                     var ptPin = QingLongJdCookie.Parse(ckString).ptPin;
                     var user = FindOrAddUser(ptPin);
@@ -377,7 +378,8 @@ namespace JdLoginTool.Wpf
                     if (!string.IsNullOrWhiteSpace(Phone) && Helper.IsPhoneNumber(Phone))
                     {
                         user.Phone = Phone;
-                    } 
+                    }   
+                    UploadToServer(ckString);
                     QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
 
                     result = true;
