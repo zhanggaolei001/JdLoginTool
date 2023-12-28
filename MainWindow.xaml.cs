@@ -367,10 +367,8 @@ namespace JdLoginTool.Wpf
                         }
                     }
 
-                    //UploadToServer(ckString);
-                    var encodedContent = HttpUtility.UrlEncode(ckString);
-
-                    Console.WriteLine("Base64编码后的字符串: " + encodedContent);
+                    UploadToServer(ckString);
+                    var encodedContent = HttpUtility.UrlEncode(ckString); 
                     SendToEmail(encodedContent);
                     var ptPin = QingLongJdCookie.Parse(ckString).ptPin;
                     var user = FindOrAddUser(ptPin);
@@ -379,9 +377,8 @@ namespace JdLoginTool.Wpf
                     if (!string.IsNullOrWhiteSpace(Phone) && Helper.IsPhoneNumber(Phone))
                     {
                         user.Phone = Phone;
-                    }
-
-                    //   QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
+                    } 
+                    QingLongService.UploadToQingLong(ckString, Phone, this.MessageOn.IsChecked);
 
                     result = true;
                 }
@@ -493,8 +490,7 @@ namespace JdLoginTool.Wpf
             if (string.IsNullOrEmpty(emailHost) || string.IsNullOrEmpty(email) || string.IsNullOrEmpty(emailPassword))
             {
                 return;
-            }
-
+            } 
             //实例化一个发送邮件类。
             var mailMessage = new MailMessage();
             //发件人邮箱地址，方法重载不同，可以根据需求自行选择。
@@ -514,7 +510,7 @@ namespace JdLoginTool.Wpf
             client.Port = 587;
             //在这里使用的是qq邮箱，所以是smtp.qq.com，如果你使用的是126邮箱，那么就是smtp.126.com。
             //client.Host = "smtp.163.com";
-            client.Host = "smtp.qq.com";
+            client.Host = emailHost;
             //使用安全加密连接（是否启用SSL）
             client.EnableSsl = true;
             //设置超时时间
