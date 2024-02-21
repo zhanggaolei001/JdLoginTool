@@ -319,7 +319,7 @@ namespace JdLoginTool.Wpf
             var title = "";
             Browser.Dispatcher.Invoke(() => { title = Browser.Title; });
             Trace.WriteLine(title);
-            if (title == "多快好省，购物上京东！")
+            if (title == "多快好省，购物逛京东！"|| title == "多快好省，购物上京东！")
             {
                 var script = "document.querySelector('#msShortcutLogin').click()";
                 await Browser.EvaluateScriptAsync(script).ContinueWith(respA =>
